@@ -1,0 +1,2039 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   ANIMATIONS.JS - BORTO WEBFLOW PROJECT
+   ═══════════════════════════════════════════════════════════════════════════
+   
+   !SYNOPSIS!
+   
+   This file handles all JavaScript animations and interactions for the Borto
+   website, with full Barba.js page transition support.
+   
+   STRUCTURE:
+   
+   1. GLOBAL CSS INJECTION (IIFE)
+      - Initial styles for CV, exhibitions, thumbnails, work lists
+   
+   2. FONT LOADING DETECTION
+      - Prevents font flash on initial page load
+   
+   3. UTILITY FUNCTIONS
+      - Slater.js module loader
+      - Bracketed text italic replacement
+   
+   4. GLOBAL SCRIPTS (run on all pages)
+      - initBackButton()              - Back navigation (.nav_back_link, .is-back)
+      - initThemeToggle()              - Dark/light mode (#Toggle button, localStorage)
+      - initYearFormatter()            - Format dates, hide duplicate years (desktop)
+      - initCVCleanup()                - Split CV <br> into <p>, wrap years in <span>
+      - initExhibitionSorting()        - Sort by artist/year (#Artist, #Year buttons)
+      - initHeadroom()                 - Auto-hide nav on scroll (Headroom.js)
+   
+   5. PAGE-SPECIFIC SCRIPTS
+      - initStaggerAnimation()             - GSAP stagger fade-up for list items
+      - initExhibitionHoverThumbnails()    - Show preview thumb on item hover (desktop)
+      - initSwiper()                       - Swiper slider for artist detail images
+      - initCVReadMore()                   - Expand/collapse CV (.cv_read_cta button)
+      - initSortExhibitionsByYear()        - Auto-sort exhibitions newest→oldest
+      - initExhibitionDetailScripts()      - Grid toggle, work hover, work modals
+      - initMeasurementDimensions()        - Format artwork dimensions (W×H×D)
+      - initHomePageScripts()              - Logo animation, grid/flex toggle
+   
+   6. BARBA.JS PAGE TRANSITIONS
+      - injectPageSpecificCSS()   - Dynamic CSS injection per page type
+      - Barba hooks                - before/after/enter transition handlers
+   
+   7. INITIALIZATION
+      - initPageScripts()         - Main orchestrator, called on load + Barba
+   
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   1. GLOBAL CSS INJECTION (IIFE)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+(function() {
+  const style = document.createElement('style');
+  style.textContent = `
+    /* Reset margin and padding for paragraphs */
+    .cv_entry p {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      align-items: flex-start;
+    }
+
+    /* Style for the span containing the year */
+    .cv_entry p span:first-child {
+      min-width: 5ch;
+      margin-right: 0.5em;
+      white-space: nowrap;
+    }
+
+    /* Hide exhibition parent items initially */
+    .g_exhibition_item {
+      opacity: 0;
+    }
+
+    /* Show after animations are ready */
+    body.animations-ready .g_exhibition_item {
+      opacity: 1;
+    }
+
+    /* Set initial state for stagger animation */
+    .g_exhibition_item_inner {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+
+    /* Hide preview thumbnails by default */
+    .g_preview_thumb_wrap {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none; /* prevent overlay interactions when hidden */
+    }
+    
+    /* Hide work list and press sections initially - will fade in after exhibition images */
+    .work_list_wrap,
+    .press_wrap {
+      opacity: 0;
+    }
+  `;
+  document.head.appendChild(style);
+})();
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2. FONT LOADING DETECTION
+   ═══════════════════════════════════════════════════════════════════════════
+   
+   Prevents FOUT (Flash of Unstyled Text) by adding .fonts-loaded class once
+   custom fonts are ready. Skips on Barba transitions (fonts stay in memory).
+   
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+(function() {
+  // Mark fonts as loaded immediately if using Barba (fonts stay in memory)
+  if (typeof barba !== 'undefined') {
+    document.documentElement.classList.add('fonts-loaded');
+    return;
+  }
+  
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(function() {
+      document.documentElement.classList.add('fonts-loaded');
+    });
+  } else {
+    // Fallback: add class after short delay if Font Loading API not supported
+    setTimeout(function() {
+      document.documentElement.classList.add('fonts-loaded');
+    }, 100);
+  }
+})();
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   3. UTILITY FUNCTIONS
+   ═══════════════════════════════════════════════════════════════════════════
+   
+   Legacy code placeholders and comments for removed functionality.
+   
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* CV: Removed auto-italics for bracketed text */
+/* Slater.app imports REMOVED - all code is now in animations.js */
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   OLD CODE REMOVED - All exhibition interactions now handled by:
+   - initExhibitionDetailScripts() (grid toggle, work modals, hover thumbnails)
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* ───────────────────────────────────────────────────────────────────────────
+   initMeasurementDimensions() - Artwork Dimensions Formatter
+   ─────────────────────────────────────────────────────────────────────────── 
+   Formats artwork dimensions (W × H × D) by hiding empty values and separators.
+   - Hides .dim-val elements that don't contain digits
+   - Shows correct number of .dim-sep separators between values
+   - Called on exhibition detail pages from initPageScripts()
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function initMeasurementDimensions() {
+  const measurementGroups = document.querySelectorAll('.g_measurement_wrap');
+  if (!measurementGroups.length) return;
+
+  measurementGroups.forEach(group => {
+    const vals = Array.from(group.querySelectorAll('.dim-val'));
+    const seps = Array.from(group.querySelectorAll('.dim-sep'));
+
+    // Hide empty values
+    vals.forEach(v => {
+      const t = (v.textContent || '').trim();
+      if (!/\d/.test(t)) v.style.display = 'none';
+    });
+
+    // Collect non-empty values
+    const nonEmptyVals = vals.filter(v => v.style.display !== 'none');
+
+    // Hide all separators first
+    seps.forEach(s => s.style.display = 'none');
+
+    // Show exactly (#values - 1) separators, left to right
+    if (nonEmptyVals.length >= 2 && seps[0]) seps[0].style.display = '';
+    if (nonEmptyVals.length >= 3 && seps[1]) seps[1].style.display = '';
+  });
+}
+
+
+
+// Register the ScrollTrigger plugin with GSAP
+gsap.registerPlugin(ScrollTrigger);
+
+
+/* ───────────────────────────────────────────────────────────────────────────
+   initExhibitionHoverThumbnails() - Preview Thumbnail Hover (List Pages)
+   ─────────────────────────────────────────────────────────────────────────── 
+   Shows/hides preview thumbnails on hover for exhibition/artist list items.
+   - Desktop (>1024px): Hover on .g_exhibition_item_inner to show thumbnail
+   - Mobile/Tablet: Thumbnails visible by default
+   - Animates .g_preview_thumb_wrap with GSAP (opacity, y, visibility)
+   - Hides thumbnail on scroll
+   - Re-initializes on window resize
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function initExhibitionHoverThumbnails() {
+  const items = document.querySelectorAll('.g_exhibition_item_inner');
+  let lastPreviewThumb = null; // Currently visible thumbnail (if any)
+  let isDesktop; // Tracks the current mode (desktop vs. mobile/tablet)
+  let handlers = []; // Store event listener references for clean-up
+
+  // This function will hide any visible thumbnail (used on scroll, etc.)
+  function hideThumbnail() {
+    if (lastPreviewThumb) {
+      gsap.to(lastPreviewThumb, { 
+        opacity: 0, 
+        y: 50, 
+        visibility: 'hidden', 
+        duration: 0.5,
+        ease: "power1.out" 
+      });
+      lastPreviewThumb = null;
+    }
+  }
+
+  function setupDesktop() {
+    const previewThumbs = document.querySelectorAll('.g_preview_thumb_wrap');
+    // Hide all thumbnails by default
+    previewThumbs.forEach((previewThumb) => {
+      gsap.set(previewThumb, { opacity: 0, y: 50, visibility: 'hidden' });
+    });
+
+    items.forEach((item) => {
+      // Get the associated preview thumbnail
+      const previewThumb = item.closest('.g_exhibition_item').querySelector('.g_preview_thumb_wrap');
+
+      // Show thumbnail when mouse enters
+      const hoverEnter = () => {
+        // If a different thumbnail is already visible, hide it first
+        if (lastPreviewThumb && lastPreviewThumb !== previewThumb) {
+          gsap.to(lastPreviewThumb, { 
+            opacity: 0, 
+            y: 50, 
+            visibility: 'hidden', 
+            duration: 0.9,
+            ease: "circ.out" 
+          });
+        }
+
+        // Animate the current thumbnail into view
+        gsap.to(previewThumb, { 
+          opacity: 1, 
+          y: 0, 
+          visibility: 'visible', 
+          duration: 0.9,
+          ease: "circ.out" 
+        });
+
+        // Update the reference to the currently visible thumbnail
+        lastPreviewThumb = previewThumb;
+      };
+
+      // Hide thumbnail when mouse leaves the item
+      const hoverLeave = () => {
+        gsap.to(previewThumb, { 
+          opacity: 0, 
+          y: 50, 
+          visibility: 'hidden', 
+          duration: 0.9,
+          ease: "circ.out" 
+        });
+        if (lastPreviewThumb === previewThumb) {
+          lastPreviewThumb = null;
+        }
+      };
+
+      item.addEventListener('mouseenter', hoverEnter);
+      item.addEventListener('mouseleave', hoverLeave);
+
+      // Save the handlers (along with the event type) so they can be removed later
+      handlers.push({ item: item, type: 'mouseenter', handler: hoverEnter });
+      handlers.push({ item: item, type: 'mouseleave', handler: hoverLeave });
+    });
+
+    // Add a scroll listener to hide any visible thumbnail when scrolling away
+    window.addEventListener('scroll', hideThumbnail);
+    handlers.push({ item: window, type: 'scroll', handler: hideThumbnail });
+  }
+
+  function setupMobile() {
+    // For mobile/tablet, clear GSAP inline styles (making thumbnails visible by default)
+    const previewThumbs = document.querySelectorAll('.g_preview_thumb_wrap');
+    previewThumbs.forEach(previewThumb => {
+      gsap.set(previewThumb, { clearProps: 'all' });
+    });
+    lastPreviewThumb = null;
+  }
+
+  // Remove any event listeners added in desktop mode
+  function removeDesktopHandlers() {
+    handlers.forEach(obj => {
+      obj.item.removeEventListener(obj.type, obj.handler);
+    });
+    handlers = [];
+    lastPreviewThumb = null;
+  }
+
+  // Set up or tear down event handlers based on viewport width
+  function handleResize() {
+    const newIsDesktop = window.innerWidth > 1024; // Adjust breakpoint as needed
+
+    if (newIsDesktop !== isDesktop) {
+      if (newIsDesktop) {
+        removeDesktopHandlers(); // Clean up (if switching from mobile/tablet)
+        setupDesktop();
+      } else {
+        removeDesktopHandlers();
+        setupMobile();
+      }
+      isDesktop = newIsDesktop;
+    }
+  }
+
+  // Initial execution and listen for window resize
+  handleResize();
+  window.addEventListener('resize', handleResize);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   initRandomizeArtistWorksAlignment() - Random left/center/right alignment
+   ─────────────────────────────────────────────────────────────────────────── 
+   Assigns one of three classes to each .artist_works_item except the first:
+   .align-left | .align-center | .align-right. Runs on artist pages and after
+   Barba transitions via initPageScripts().
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function initRandomizeArtistWorksAlignment() {
+  const items = document.querySelectorAll('.artist_works_layout .artist_works_item');
+  if (!items.length) return;
+
+  const choices = ['align-left', 'align-center', 'align-right'];
+  let previousAlignment = null;
+
+  items.forEach(function(item, index) {
+    // Skip first item: remains 100% width per earlier rule
+    if (index === 0) return;
+
+    item.classList.remove('align-left', 'align-center', 'align-right');
+    
+    // Pick a random alignment that differs from the previous one
+    let pick;
+    let attempts = 0;
+    do {
+      pick = choices[Math.floor(Math.random() * choices.length)];
+      attempts++;
+    } while (pick === previousAlignment && attempts < 10);
+    
+    item.classList.add(pick);
+    previousAlignment = pick;
+  });
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   initArtistWorksScrollAnimation() - ScrollTrigger fade-in/move-up
+   ─────────────────────────────────────────────────────────────────────────── 
+   Animates .artist_works_item elements with fade-in and upward movement when
+   scrolled into view. Runs on artist pages and reinitializes after Barba.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function initArtistWorksScrollAnimation() {
+  const items = document.querySelectorAll('.artist_works_layout .artist_works_item');
+  if (!items.length) return;
+
+  console.log('🎬 Setting up scroll animations for', items.length, 'items');
+
+  items.forEach(function(item, index) {
+    console.log('  ➜ Creating ScrollTrigger for item', index + 1);
+    
+    // Set initial state
+    gsap.set(item, { opacity: 0, y: 100 });
+    
+    // Create separate ScrollTrigger
+    const trigger = ScrollTrigger.create({
+      trigger: item,
+      start: 'top 85%',
+      once: true,
+      markers: false,
+      onEnter: () => {
+        console.log('✅ Item', index + 1, 'entering viewport - animating');
+        console.log('  Current opacity:', getComputedStyle(item).opacity);
+        console.log('  Current transform:', getComputedStyle(item).transform);
+        
+        const animation = gsap.to(item, {
+          opacity: 1,
+          y: 0,
+          duration: 0.8,
+          ease: 'power2.out',
+          onStart: () => console.log('  🎬 Animation started for item', index + 1),
+          onComplete: () => console.log('  ✓ Animation completed for item', index + 1)
+        });
+        
+        console.log('  Animation object:', animation);
+      }
+    });
+    console.log('  ✓ ScrollTrigger created for item', index + 1, trigger);
+  });
+
+  // Wait for images to load before refreshing ScrollTrigger
+  const images = document.querySelectorAll('.artist_works_layout .artist_works_img');
+  console.log('🖼️ Waiting for', images.length, 'images to load...');
+  
+  let loadedCount = 0;
+  const checkImagesLoaded = () => {
+    loadedCount++;
+    console.log('  Image loaded:', loadedCount, '/', images.length);
+    
+    if (loadedCount >= images.length) {
+      console.log('✅ All images loaded, refreshing ScrollTrigger...');
+      ScrollTrigger.refresh();
+      
+      const allTriggers = ScrollTrigger.getAll();
+      console.log('🔄 ScrollTrigger refreshed');
+      console.log('📊 Total items:', items.length);
+      console.log('📊 Total ScrollTriggers created:', allTriggers.length);
+      
+      const artistWorksTriggers = allTriggers.filter(t => 
+        t.trigger && t.trigger.classList && t.trigger.classList.contains('artist_works_item')
+      );
+      console.log('📊 Artist works triggers:', artistWorksTriggers.length);
+      
+      artistWorksTriggers.forEach((trigger, i) => {
+        console.log(`  Trigger ${i + 1}:`, trigger.trigger, 'start:', trigger.start, 'enabled:', trigger.enabled);
+      });
+    }
+  };
+  
+  if (images.length === 0) {
+    // No images, just refresh normally
+    setTimeout(() => ScrollTrigger.refresh(), 100);
+  } else {
+    images.forEach(img => {
+      if (img.complete) {
+        checkImagesLoaded();
+      } else {
+        img.addEventListener('load', checkImagesLoaded);
+        img.addEventListener('error', checkImagesLoaded); // Count errors too
+      }
+    });
+    
+    // Fallback: refresh after 2 seconds regardless
+    setTimeout(() => {
+      console.log('⏱️ Timeout reached, forcing ScrollTrigger refresh...');
+      ScrollTrigger.refresh();
+    }, 2000);
+  }
+}
+
+
+/* Headroom Navigation - Global (home, exhibitions, and others) */
+/* ═══════════════════════════════════════════════════════════════════════════
+   4. GLOBAL SCRIPTS (Run on all pages)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ───────────────────────────────────────────────────────────────────────────
+   initBackButton() - Back Navigation Handler
+   ─────────────────────────────────────────────────────────────────────────── 
+   Uses event delegation to handle back button clicks (nav_back_link, is-back).
+   Persists across Barba transitions.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function initBackButton() {
+  // Use event delegation so it works after Barba transitions
+  // Remove old listener first
+  if (window.backButtonHandler) {
+    document.removeEventListener('click', window.backButtonHandler);
+  }
+  
+  window.backButtonHandler = function(e) {
+    // Check if clicked element or its parent is a back button
+    const target = e.target.closest('.nav_back_link, .nav_menu_item.is-back');
+    if (target) {
+      e.preventDefault();
+      window.history.back();
+    }
+  };
+  
+  document.addEventListener('click', window.backButtonHandler);
+}
+
+function initHeadroom() {
+  if (typeof Headroom === 'undefined') {
+    console.log('⚠️ Headroom library not loaded');
+    return;
+  }
+  
+  var nav = document.getElementById("nav");
+  if (!nav) {
+    console.log('⚠️ Nav element not found');
+    return;
+  }
+  
+  // Destroy existing Headroom instance if it exists
+  if (nav.headroomInstance) {
+    console.log('🔄 Destroying existing Headroom instance');
+    try {
+      nav.headroomInstance.destroy();
+    } catch(e) {
+      console.log('⚠️ Error destroying Headroom:', e);
+    }
+    nav.headroomInstance = null;
+    nav.dataset.headroomInit = '0';
+  }
+  
+  // Skip if already initialized (but no instance stored)
+  if (nav.dataset.headroomInit === '1') {
+    console.log('⚠️ Headroom already marked as initialized but no instance found');
+    return;
+  }
+  
+  console.log('✅ Initializing Headroom...');
+
+    var pathname = window.location.pathname;
+    var isHomePage = pathname === '/' || pathname === '';
+    var isExhibitionDetail = pathname.includes('/exhibitions/');
+    var shouldAutoHide = isHomePage || isExhibitionDetail;
+    
+    var headroomInstance;
+    var settings = {
+      offset: isExhibitionDetail ? 75 : 50,
+      tolerance: isExhibitionDetail ? { up: 25, down: 12 } : { up: 20, down: 10 },
+      classes: {
+        pinned: "nav-pinned",
+        unpinned: "nav-unpinned"
+      },
+      onPin: function() {
+        // Auto-hide after 3s on home page and exhibition detail pages
+        if (shouldAutoHide && window.scrollY > 0) {
+          setTimeout(function() {
+            if (window.scrollY > 0 && headroomInstance) headroomInstance.unpin();
+          }, 3000);
+        }
+      }
+    };
+
+  var headroomInstance = new Headroom(nav, settings);
+  headroomInstance.init();
+  nav.headroomInstance = headroomInstance; // Store reference for cleanup
+  nav.dataset.headroomInit = '1';
+
+  window.addEventListener('resize', function() {
+    if (headroomInstance) headroomInstance.update();
+  });
+}
+
+// Note: initHeadroom() is now called from initPageScripts() instead of DOMContentLoaded
+// to work properly with Barba.js transitions
+
+/* ========================================
+   PAGE INITIALIZATION FUNCTIONS
+   ======================================== */
+
+// Master function to initialize all page-specific scripts
+/* ═══════════════════════════════════════════════════════════════════════════
+   7. INITIALIZATION - MAIN ORCHESTRATOR
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ───────────────────────────────────────────────────────────────────────────
+   initPageScripts() - Main Orchestrator
+   ─────────────────────────────────────────────────────────────────────────── 
+   Called on initial load AND after every Barba transition.
+   Detects current page type and initializes appropriate scripts.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function initPageScripts() {
+  console.log('🔄 Initializing page scripts...');
+  
+  const pathname = window.location.pathname;
+  const isArtistPage = pathname.includes('/artists/') && !pathname.endsWith('/artists');
+  const isArtistsList = pathname === '/artists' || pathname === '/artists/';
+  const isExhibitionDetail = pathname.includes('/exhibitions/') && !pathname.endsWith('/exhibitions');
+  const isExhibitionsList = pathname === '/exhibitions' || pathname === '/exhibitions/';
+  const isHome = pathname === '/' || pathname === '';
+  
+  // Global scripts (run on all pages)
+  initBackButton(); // Back navigation
+  initHeadroom();
+  initThemeToggle();
+  initYearFormatter();
+  initCVCleanup();
+  initExhibitionSorting();
+  
+  // Page-specific scripts
+  if (isArtistsList || isExhibitionsList || isArtistPage) {
+    initStaggerAnimation(); // Artist detail pages also have exhibition lists!
+    setTimeout(() => initExhibitionHoverThumbnails(), 300); // Wait for stagger
+  }
+  
+  if (isArtistPage) {
+    // Skip page_main fade-in to avoid conflict with scroll animations
+    
+    initSwiper();
+    initCVReadMore();
+    initSortExhibitionsByYear();
+    initRandomizeArtistWorksAlignment();
+    initArtistWorksScrollAnimation();
+  }
+  
+  if (isExhibitionDetail) {
+    // Fade in exhibition detail page - animate .show_wrap children instead of .page_main
+    // (because .work_list_thumb_wrap has position:fixed and breaks with parent transform)
+    const pageMain = document.querySelector('.page_main');
+    const showWrap = document.querySelector('.show_wrap');
+    
+    // IMMEDIATELY hide work list and press sections to prevent flicker
+    const workListWrap = document.querySelector('.work_list_wrap');
+    const pressWrap = document.querySelector('.press_wrap');
+    if (workListWrap) gsap.set(workListWrap, { opacity: 0 });
+    if (pressWrap) gsap.set(pressWrap, { opacity: 0 });
+    
+    if (pageMain && getComputedStyle(pageMain).opacity === '0') {
+      // Just fade in page_main without transform
+      gsap.to(pageMain, {
+        opacity: 1,
+        duration: 0.3,
+        ease: 'power2.out'
+      });
+    }
+    
+    // Animate show_wrap items with upward movement
+    if (showWrap) {
+      const showItems = showWrap.querySelectorAll('.show_item');
+      if (showItems.length > 0) {
+        gsap.set(showItems, { opacity: 0, y: 30 });
+        
+        const images = showWrap.querySelectorAll('img.show_img');
+        let hasShown = false;
+        
+        const showItems_anim = () => {
+          if (hasShown) return;
+          hasShown = true;
+          gsap.to(showItems, {
+            opacity: 1,
+            y: 0,
+            duration: 0.9,
+            delay: 0.2,
+            stagger: 0.05,
+            ease: 'power2.out',
+            onComplete: () => {
+              // After show_wrap animation, fade in work list and press sections
+              if (workListWrap) {
+                gsap.to(workListWrap, {
+                  opacity: 1,
+                  duration: 0.6,
+                  ease: 'power2.out'
+                });
+              }
+              if (pressWrap) {
+                gsap.to(pressWrap, {
+                  opacity: 1,
+                  duration: 0.6,
+                  delay: 0.2,
+                  ease: 'power2.out'
+                });
+              }
+            }
+          });
+        };
+        
+        // Show after first image loads or timeout
+        if (images.length > 0) {
+          const firstImage = images[0];
+          if (firstImage.complete) {
+            requestAnimationFrame(showItems_anim);
+          } else {
+            firstImage.addEventListener('load', showItems_anim);
+            setTimeout(showItems_anim, 400);
+          }
+        } else {
+          requestAnimationFrame(showItems_anim);
+        }
+      }
+    }
+    
+    initExhibitionDetailScripts();
+    initMeasurementDimensions(); // Format artwork dimensions
+  }
+  
+  if (isHome) {
+    initHomePageScripts();
+  }
+  
+  console.log('✅ Page scripts initialized');
+}
+
+// Placeholder functions (will be defined or already exist below)
+// initStaggerAnimation() - already defined below (line ~928)
+// initExhibitionHoverThumbnails() - already defined below (line ~1170)
+
+/* ───────────────────────────────────────────────────────────────────────────
+   initThemeToggle() - Dark/Light Mode Toggle
+   ─────────────────────────────────────────────────────────────────────────── 
+   Manages theme switching between dark and light modes.
+   - Reads theme from localStorage (defaults to "light")
+   - Applies theme to .page_wrap elements and body
+   - Uses event delegation for #Toggle button
+   - Persists theme choice in localStorage
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function initThemeToggle() {
+  const pageWrapElements = document.querySelectorAll(".page_wrap");
+  
+  function applyTheme(theme) {
+    pageWrapElements.forEach(el => el.setAttribute("data-theme", theme));
+    document.body.setAttribute("data-theme", theme);
+  }
+  
+  const storedTheme = localStorage.getItem("theme") || "light";
+  applyTheme(storedTheme);
+  
+  // Event delegation - remove old listener
+  if (window.themeToggleHandler) {
+    document.removeEventListener('click', window.themeToggleHandler);
+  }
+  
+  window.themeToggleHandler = function(e) {
+    if (e.target.closest('#Toggle')) {
+      const newTheme = localStorage.getItem("theme") === "dark" ? "light" : "dark";
+      localStorage.setItem("theme", newTheme);
+      applyTheme(newTheme);
+    }
+  };
+  
+  document.addEventListener('click', window.themeToggleHandler);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   initYearFormatter() - Date Formatting & Duplicate Year Hiding
+   ─────────────────────────────────────────────────────────────────────────── 
+   Formats exhibition dates and hides consecutive duplicate years.
+   - Converts DD.MM.YY dates to YYYY format
+   - Hides consecutive repeating years (desktop only) via opacity: 0
+   - Shows all years on mobile/tablet (<= 1024px)
+   - Handles both .g_exhibition_item .g_date and .cv_entry .g_date
+   - Re-runs on window resize
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function initYearFormatter() {
+  // Year formatting logic - runs on page load
+  setTimeout(function() {
+    const exhibitionDates = document.querySelectorAll('.g_exhibition_item .g_date');
+    const cvDates = document.querySelectorAll('.cv_entry .g_date');
+
+    function updateDateDisplay() {
+      const isTabletOrSmaller = window.innerWidth <= 1024;
+      let previousExhibitionYear = null;
+      
+      exhibitionDates.forEach(function(dateElement) {
+        const dateText = dateElement.textContent.trim();
+        const dateParts = dateText.split('.');
+        let year = dateParts[2];
+
+        if (year && year.length === 2) {
+          year = parseInt(year, 10) < 50 ? '20' + year : '19' + year;
+          dateElement.textContent = year;
+        } else if (!year) {
+          year = dateText;
+        }
+
+        if (isTabletOrSmaller) {
+          dateElement.style.opacity = '1';
+        } else {
+          if (year === previousExhibitionYear) {
+            dateElement.style.opacity = '0';
+          } else {
+            dateElement.style.opacity = '1';
+            previousExhibitionYear = year;
+          }
+        }
+      });
+
+      let previousCVYear = null;
+      cvDates.forEach(function(dateElement) {
+        const year = dateElement.textContent.trim();
+        if (isTabletOrSmaller) {
+          dateElement.style.opacity = '1';
+        } else {
+          if (year === previousCVYear) {
+            dateElement.style.opacity = '0';
+          } else {
+            dateElement.style.opacity = '1';
+            previousCVYear = year;
+          }
+        }
+      });
+    }
+
+    updateDateDisplay();
+    window.addEventListener('resize', updateDateDisplay);
+  }, 100);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   initCVCleanup() - CV Paragraph Splitting & Year Wrapping
+   ─────────────────────────────────────────────────────────────────────────── 
+   Processes CV entries from Sanity CMS block content.
+   - Removes all <em> and <i> tags (strips italics)
+   - Splits multi-entry paragraphs separated by <br> into individual <p> tags
+   - Wraps years (YYYY) at start of lines with <span class="g_date">
+   - Creates proper paragraph structure for flex layout alignment
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function initCVCleanup() {
+  const cvContainer = document.querySelector('.cv_entry');
+  if (!cvContainer) return;
+  
+  const paragraphs = cvContainer.querySelectorAll('p');
+  paragraphs.forEach(function(entry) {
+    if (entry.querySelector('.g_date')) return;
+    
+    let html = entry.innerHTML;
+    html = html.replace(/<em>/gi, '').replace(/<\/em>/gi, '');
+    html = html.replace(/<i>/gi, '').replace(/<\/i>/gi, '');
+    
+    if (html.includes('<br>')) {
+      const lines = html.split(/<br\s*\/?>/i).filter(line => line.trim() !== '');
+      if (lines.length > 1) {
+        const fragment = document.createDocumentFragment();
+        lines.forEach(function(line) {
+          const newP = document.createElement('p');
+          newP.className = entry.className;
+          const trimmed = line.trim();
+          if (/^\d{4}/.test(trimmed)) {
+            line = line.replace(/^(\s*)(\d{4})(\s*)/, '$1<span class="g_date">$2</span>$3');
+          }
+          newP.innerHTML = line;
+          fragment.appendChild(newP);
+        });
+        entry.parentNode.replaceChild(fragment, entry);
+      } else {
+        const trimmed = html.trim();
+        if (/^\d{4}/.test(trimmed)) {
+          html = html.replace(/^(\s*)(\d{4})(\s*)/, '$1<span class="g_date">$2</span>$3');
+        }
+        entry.innerHTML = html;
+      }
+    } else {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = html;
+      const textContent = tempDiv.textContent || tempDiv.innerText;
+      const trimmed = textContent.trim();
+      if (/^\d{4}/.test(trimmed)) {
+        html = html.replace(/^(\s*)(\d{4})(\s*)/, '$1<span class="g_date">$2</span>$3');
+      }
+      entry.innerHTML = html;
+    }
+  });
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   initExhibitionSorting() - Artist/Year Sort Toggle (Exhibition Lists)
+   ─────────────────────────────────────────────────────────────────────────── 
+   Enables sorting of exhibition list by artist name or start date.
+   - Toggle buttons: #Artist and #Year
+   - Sorts .g_exhibitions_collection children
+   - Reads data-artist and data-start-date attributes
+   - Toggles between ascending/descending on each click
+   - Uses event delegation for Barba compatibility
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function initExhibitionSorting() {
+  let sortAscArtist = true;
+  let sortAscStartDate = true;
+
+  function sortItems(attribute, sortAsc) {
+    const container = document.querySelector('.g_exhibitions_collection');
+    if (!container) return;
+    
+    const items = Array.from(container.children);
+    items.sort(function(a, b) {
+      let aVal = a.getAttribute('data-' + attribute);
+      let bVal = b.getAttribute('data-' + attribute);
+      
+      if (attribute === 'start-date') {
+        let aTime = new Date(aVal).getTime();
+        let bTime = new Date(bVal).getTime();
+        if (isNaN(aTime) || isNaN(bTime)) return 0;
+        return sortAsc ? aTime - bTime : bTime - aTime;
+      }
+      return sortAsc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+    });
+    items.forEach(item => container.appendChild(item));
+  }
+
+  // Event delegation - remove old listener
+  if (window.exhibitionSortHandler) {
+    document.removeEventListener('click', window.exhibitionSortHandler);
+  }
+  
+  window.exhibitionSortHandler = function(e) {
+    const artistBtn = e.target.closest('#Artist');
+    const yearBtn = e.target.closest('#Year');
+    
+    if (artistBtn) {
+      sortItems("artist", sortAscArtist);
+      sortAscArtist = !sortAscArtist;
+    } else if (yearBtn) {
+      sortItems("start-date", sortAscStartDate);
+      sortAscStartDate = !sortAscStartDate;
+    }
+  };
+  
+  document.addEventListener('click', window.exhibitionSortHandler);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   5. PAGE-SPECIFIC SCRIPTS
+   ═══════════════════════════════════════════════════════════════════════════
+   
+   Functions that run only on specific page types (artists, exhibitions, home).
+   Called conditionally by initPageScripts() based on current URL.
+   
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ───────────────────────────────────────────────────────────────────────────
+   initStaggerAnimation() - Exhibition/Artist List Item Reveals
+   ─────────────────────────────────────────────────────────────────────────── 
+   Animates .g_exhibition_item_inner elements with staggered fade-up.
+   Runs on: artist lists, exhibition lists, artist detail pages.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function initStaggerAnimation() {
+  const exhibitionItems = document.querySelectorAll('.g_exhibition_item_inner');
+  if (exhibitionItems.length) {
+    document.body.classList.add('animations-ready');
+    gsap.to('.g_exhibition_item_inner', {
+      opacity: 1,
+      y: 0,
+      stagger: 0.02, // Fast stagger
+      duration: 0.2, // Quick duration
+      ease: 'power1.out' // Snappy ease
+    });
+  }
+}
+
+function initSwiper() {
+  // Exit early if not on artist page
+  const pathname = window.location.pathname;
+  if (!pathname.includes('/artists/') || pathname === '/artists' || pathname === '/artists/') {
+    console.log('Not on artist detail page, skipping Swiper');
+    return;
+  }
+  
+  if (typeof Swiper === 'undefined') {
+    console.log('Swiper not available');
+    return;
+  }
+  
+  // Use longer delay to ensure DOM and Swiper are fully ready
+  setTimeout(function() {
+    function numberWithZero(num) {
+      return num < 10 ? "0" + num : num;
+    }
+
+    // Query elements - match working script selectors
+    const sliderCaption = document.querySelector('.slider_caption');
+    const swiperNumberCurrent = document.querySelector('.swiper-number-current');
+    const swiperNumberTotal = document.querySelector('.swiper-number-total');
+    const sliderGallery = document.querySelector('.slider-gallery_component');
+    const swiperElement = sliderGallery ? sliderGallery.querySelector('.swiper.is-slider-bg') : null;
+
+    console.log('Looking for slider elements:', {
+      gallery: sliderGallery ? 'found' : 'not found',
+      swiper: swiperElement ? 'found' : 'not found',
+      caption: sliderCaption ? 'found' : 'not found',
+      numberCurrent: swiperNumberCurrent ? 'found' : 'not found',
+      numberTotal: swiperNumberTotal ? 'found' : 'not found',
+      existingInstance: swiperElement && swiperElement.swiper ? 'yes' : 'no'
+    });
+
+    if (!sliderGallery || !swiperElement) {
+      console.log('Slider gallery or swiper element not found');
+      return;
+    }
+    
+    // CRITICAL: Completely destroy and cleanup existing Swiper instances
+    if (window.artistSwiper) {
+      console.log('Destroying existing global Swiper instance');
+      try {
+        window.artistSwiper.destroy(true, true);
+        delete window.artistSwiper;
+      } catch (e) {
+        console.error('Error destroying global Swiper:', e);
+      }
+    }
+    
+    if (swiperElement.swiper) {
+      console.log('Destroying existing element Swiper instance');
+      try {
+        swiperElement.swiper.destroy(true, true);
+        delete swiperElement.swiper;
+      } catch (e) {
+        console.error('Error destroying element Swiper:', e);
+      }
+    }
+
+    // Calculate total slides
+    const totalSlides = swiperElement.querySelectorAll('.swiper-slide.is-slider-bg').length;
+    if (swiperNumberTotal) {
+      swiperNumberTotal.textContent = numberWithZero(totalSlides);
+    }
+
+    console.log('Creating new Swiper instance');
+    
+    // Store in window to prevent duplicates across Barba transitions
+    const bgSwiper = window.artistSwiper = new Swiper(swiperElement, {
+      slidesPerView: "auto",
+      speed: 400,
+      effect: "fade",
+      allowTouchMove: true,
+      loop: true,
+      loopedSlides: 3,
+      centeredSlides: true,
+      preventClicks: false,
+      preventClicksPropagation: false,
+      slideActiveClass: "is-active",
+      slideDuplicateActiveClass: "is-active",
+      mousewheel: {
+        forceToAxis: true,
+      },
+      keyboard: {
+        enabled: true,
+        onlyInViewport: true,
+      },
+      navigation: {
+        nextEl: sliderGallery.querySelector('.swiper-next'),
+        prevEl: sliderGallery.querySelector('.swiper-prev')
+      }
+      // Autoplay removed - was causing errors
+    });
+
+    function updateCaption() {
+      const activeSlide = bgSwiper.slides[bgSwiper.realIndex];
+      const imgElement = activeSlide ? activeSlide.querySelector('.swiper_img') : null;
+      const imgAltText = imgElement ? imgElement.getAttribute("alt") : '';
+      
+      if (sliderCaption && imgAltText) {
+        // Replace [text] with italic spans
+        const formattedCaption = imgAltText.replace(/\[(.*?)\]/g, '<span class="g-italic">$1</span>');
+        sliderCaption.innerHTML = formattedCaption;
+      } else if (sliderCaption) {
+        sliderCaption.textContent = '';
+      }
+    }
+
+    // Wait a moment before attaching event handlers to ensure Swiper is fully ready
+    setTimeout(function() {
+      // Click handler for navigation
+      const swiperClickArea = sliderGallery.querySelector('.swiper.is-slider-bg');
+      if (swiperClickArea) {
+        swiperClickArea.onclick = function(e) {
+          const rect = this.getBoundingClientRect();
+          const clickX = e.clientX - rect.left;
+          const containerWidth = rect.width;
+          
+          if (clickX < containerWidth / 2) {
+            bgSwiper.slidePrev();
+          } else {
+            bgSwiper.slideNext();
+          }
+        };
+      }
+
+      bgSwiper.on("slideChange", function () {
+        const slideNumber = numberWithZero(bgSwiper.realIndex + 1);
+        if (swiperNumberCurrent) {
+          swiperNumberCurrent.textContent = slideNumber;
+        }
+        updateCaption();
+      });
+
+      updateCaption();
+      console.log('✅ Swiper fully initialized and ready for interaction');
+    }, 100);
+    
+    console.log('✅ Swiper instance created with', totalSlides, 'slides');
+  }, 500); // Longer delay for Swiper to be fully ready
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   initCVReadMore() - CV Expand/Collapse Toggle (Artist Detail)
+   ─────────────────────────────────────────────────────────────────────────── 
+   Expands/collapses CV content with Read More/Less button.
+   - Toggles .cv_entry_wrap maxHeight between 50vh and full height
+   - Shows/hides .cv_fade element (gradient overlay)
+   - Updates button text between "Read More" and "Read Less"
+   - Uses event delegation on .cv_read_cta
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function initCVReadMore() {
+  const cvEntryWrap = document.querySelector('.cv_entry_wrap');
+  const cvEntry = document.querySelector('.cv_entry');
+  const cvFade = document.querySelector('.cv_fade');
+  
+  if (!cvEntryWrap || !cvEntry || !cvFade) return;
+  
+  let isExpanded = false;
+  
+  // Event delegation - remove old listener
+  if (window.cvReadMoreHandler) {
+    document.removeEventListener('click', window.cvReadMoreHandler);
+  }
+  
+  window.cvReadMoreHandler = function(e) {
+    const readCTA = e.target.closest('.cv_read_cta');
+    if (readCTA) {
+      isExpanded = !isExpanded;
+      const fullHeight = cvEntry.scrollHeight + "px";
+      
+      if (isExpanded) {
+        gsap.to(cvEntryWrap, { maxHeight: fullHeight, duration: 0.8, ease: "power2.inOut" });
+        cvFade.style.display = 'none';
+        readCTA.textContent = 'Read Less';
+        cvEntryWrap.classList.add('expanded');
+      } else {
+        gsap.to(cvEntryWrap, { maxHeight: '50vh', duration: 0.8, ease: "power2.inOut" });
+        cvFade.style.display = 'block';
+        readCTA.textContent = 'Read More';
+        cvEntryWrap.classList.remove('expanded');
+      }
+    }
+  };
+  
+  document.addEventListener('click', window.cvReadMoreHandler);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   initSortExhibitionsByYear() - Auto-Sort Exhibitions by Year (Artist Detail)
+   ─────────────────────────────────────────────────────────────────────────── 
+   Automatically sorts artist's exhibition list by year (newest first).
+   - Runs once on page load for artist detail pages
+   - Reads [data-year] attribute from .w-dyn-item elements
+   - Sorts descending (newest to oldest)
+   - Re-appends items in sorted order
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function initSortExhibitionsByYear() {
+  const list = document.querySelector('.g_exhibitions_collection');
+  if (!list) return;
+  
+  const items = Array.from(list.querySelectorAll('.w-dyn-item'));
+  items.sort((a, b) => {
+    const aYear = parseInt(a.querySelector('[data-year]')?.dataset.year || '0');
+    const bYear = parseInt(b.querySelector('[data-year]')?.dataset.year || '0');
+    return bYear - aYear; // Descending
+  });
+  items.forEach(it => list.appendChild(it));
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   initExhibitionDetailScripts() - Exhibition Detail Page Interactions
+   ─────────────────────────────────────────────────────────────────────────── 
+   Handles all exhibition detail page functionality:
+   - Grid/Fullscreen toggle (#grid-toggle button)
+   - Image click navigation in grid view
+   - Work list hover thumbnails (.work_list_thumb_inner)
+   - Work modal system (.works_modal)
+   
+   Uses event delegation for Barba compatibility.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function initExhibitionDetailScripts() {
+  console.log('Initializing exhibition detail scripts...');
+  
+  // 1. Grid/Fullscreen toggle
+  const container = document.querySelector('.show_inner');
+  const toggleButton = document.querySelector('#grid-toggle'); // ID added in Webflow
+  
+  if (!container) return;
+
+  // Check current layout state from container
+  function getCurrentViewMode() {
+    const display = window.getComputedStyle(container).display;
+    return display === 'grid' ? 'grid' : 'flex';
+  }
+
+  function showGridView() {
+    console.log('Switching to Grid View');
+    const showItems = document.querySelectorAll('.show_item');
+    const images = document.querySelectorAll('.show_img');
+    
+    gsap.killTweensOf(showItems);
+    gsap.killTweensOf(container);
+    
+    gsap.to(showItems, {
+      scale: 0.9,
+      opacity: 0,
+      duration: 0.5,
+      ease: "power2.inOut",
+      onComplete: () => {
+        window.scrollTo(0, 0);
+        
+        // Use Webflow classes
+        container.classList.remove('u-vflex-center-top');
+        container.classList.add('u-grid-custom');
+        
+        // Add .is-shrunk to images
+        images.forEach(image => {
+          image.classList.add('is-shrunk');
+        });
+        
+        // Update show item classes
+        showItems.forEach(item => {
+          item.classList.remove('u-vflex-center-center');
+          item.classList.add('u-vflex-left-top');
+        });
+        
+        // Reset GSAP transforms
+        gsap.set(showItems, { clearProps: "all" });
+        
+        // Stagger back in
+        gsap.set(showItems, { opacity: 0, y: 30 });
+        gsap.to(showItems, {
+          opacity: 1,
+          y: 0,
+          duration: 0.8,
+          ease: "power2.out",
+          stagger: 0.1
+        });
+      }
+    });
+  }
+
+  function showFullScreenView(clickedItem) {
+    console.log('Switching to Full-Screen Flexbox View');
+    const showItems = document.querySelectorAll('.show_item');
+    const images = document.querySelectorAll('.show_img');
+    
+    gsap.killTweensOf(showItems);
+    gsap.killTweensOf(container);
+    
+    gsap.to(showItems, {
+      scale: 0.9,
+      opacity: 0,
+      duration: 0.5,
+      ease: "power2.inOut",
+      onComplete: () => {
+        // Use Webflow classes
+        container.classList.remove('u-grid-custom');
+        container.classList.add('u-vflex-center-top');
+        
+        // Remove .is-shrunk from images
+        images.forEach(image => {
+          image.classList.remove('is-shrunk');
+        });
+        
+        // Update show item classes
+        showItems.forEach(item => {
+          item.classList.remove('u-vflex-left-top');
+          item.classList.add('u-vflex-center-center');
+        });
+        
+        // Reset GSAP transforms
+        gsap.set(showItems, { clearProps: "all" });
+        
+        // Scroll to clicked item if provided
+        if (clickedItem) {
+          clickedItem.scrollIntoView({ behavior: 'auto', block: 'center' });
+          gsap.fromTo(clickedItem, 
+            { opacity: 0, scale: 0.8 }, 
+            { opacity: 1, scale: 1, duration: 0.8, ease: "power2.out" }
+          );
+        }
+      }
+    });
+  }
+
+  // Use event delegation for toggle and images - works after Barba transitions
+  // Remove old listener first
+  if (window.exhibitionDetailHandler) {
+    document.removeEventListener('click', window.exhibitionDetailHandler);
+  }
+  
+  window.exhibitionDetailHandler = function(e) {
+    console.log('Exhibition detail click detected:', e.target);
+    
+    // Check for toggle button click (looks for #grid-toggle ID)
+    const toggleBtn = e.target.closest('#grid-toggle');
+    console.log('Toggle button found:', toggleBtn);
+    
+    if (toggleBtn) {
+      const currentMode = getCurrentViewMode();
+      console.log('Toggle Button Clicked', 'Current mode:', currentMode);
+      
+      if (currentMode === 'flex') {
+        showGridView();
+      } else {
+        showFullScreenView(null);
+      }
+      return;
+    }
+    
+    // Check for image click
+    const clickedImage = e.target.closest('.show_img');
+    if (clickedImage) {
+      const currentMode = getCurrentViewMode();
+      if (currentMode === 'flex') return; // Already in fullscreen, do nothing
+      
+      console.log('Image Clicked');
+      e.preventDefault();
+      const clickedItem = clickedImage.closest('.show_item');
+      showFullScreenView(clickedItem);
+    }
+  };
+  
+  document.addEventListener('click', window.exhibitionDetailHandler);
+
+  // 2. Work list hover thumbnails - Fixed for Barba
+  let lastWorkThumb = null;
+  let workHandlers = window.workHandlers || [];
+
+  function hideWorkThumbnail() {
+    if (lastWorkThumb) {
+      gsap.to(lastWorkThumb, { 
+        opacity: 0, 
+        y: 50, 
+        visibility: 'hidden', 
+        duration: 0.5,
+        ease: "power1.out" 
+      });
+      lastWorkThumb = null;
+    }
+  }
+  
+  // Remove old handlers
+  workHandlers.forEach(obj => {
+    obj.item.removeEventListener(obj.type, obj.handler);
+  });
+  workHandlers = [];
+
+  function setupWorkHoverDesktop() {
+    // Re-query fresh elements from DOM
+    const workItems = document.querySelectorAll('.work_list_caption_wrap');
+    const workThumbs = document.querySelectorAll('.work_list_thumb_inner');
+    
+    console.log('Setting up work hover for', workItems.length, 'items');
+    
+    // Hide all thumbnails by default
+    workThumbs.forEach(thumb => {
+      gsap.set(thumb, { opacity: 0, y: 50, visibility: 'hidden' });
+    });
+
+    workItems.forEach((item, index) => {
+      const thumb = item.parentElement.querySelector('.work_list_thumb_inner');
+      
+      if (!thumb) {
+        console.warn('No thumb found for work item', index);
+        return;
+      }
+
+      const hoverEnter = () => {
+        console.log('🔍 Thumb element:', thumb);
+        console.log('🔍 Thumb computed style:', window.getComputedStyle(thumb));
+        console.log('🔍 Thumb display:', window.getComputedStyle(thumb).display);
+        console.log('🔍 Thumb position:', window.getComputedStyle(thumb).position);
+        
+        // If another thumbnail is already visible, hide it first
+        if (lastWorkThumb && lastWorkThumb !== thumb) {
+          gsap.to(lastWorkThumb, { 
+            opacity: 0, 
+            y: 50, 
+            visibility: 'hidden', 
+            duration: 0.9,
+            ease: "circ.out" 
+          });
+        }
+
+        // Animate the current thumbnail into view
+        gsap.to(thumb, { 
+          opacity: 1, 
+          y: 0, 
+          visibility: 'visible', 
+          duration: 0.9,
+          ease: "circ.out" 
+        });
+
+        lastWorkThumb = thumb;
+      };
+
+      const hoverLeave = () => {
+        gsap.to(thumb, { 
+          opacity: 0, 
+          y: 50, 
+          visibility: 'hidden', 
+          duration: 0.9,
+          ease: "circ.out" 
+        });
+        if (lastWorkThumb === thumb) {
+          lastWorkThumb = null;
+        }
+      };
+
+      item.addEventListener('mouseenter', hoverEnter);
+      item.addEventListener('mouseleave', hoverLeave);
+      workHandlers.push({ item, type: 'mouseenter', handler: hoverEnter });
+      workHandlers.push({ item, type: 'mouseleave', handler: hoverLeave });
+    });
+
+    window.addEventListener('scroll', hideWorkThumbnail);
+    workHandlers.push({ item: window, type: 'scroll', handler: hideWorkThumbnail });
+    
+    // Store globally for cleanup on next call
+    window.workHandlers = workHandlers;
+  }
+
+  if (window.innerWidth > 1024) {
+    setupWorkHoverDesktop();
+  }
+
+  // 3. Work list modal - use inline handler
+  const workItemsForModal = document.querySelectorAll('.work_list_caption_wrap');
+  workItemsForModal.forEach(item => {
+    item.onclick = function() {
+      const modal = item.querySelector('.works_modal');
+      if (modal && modal.classList.contains('closed')) {
+        document.body.style.overflow = 'hidden';
+        modal.classList.remove('closed');
+        modal.classList.add('open');
+        gsap.fromTo(modal, 
+          { opacity: 0, scale: 0.8 },
+          { opacity: 1, scale: 1, duration: 0.5, ease: "power2.out" }
+        );
+        
+        const closeModal = function(e) {
+          const modal = e.currentTarget;
+          gsap.to(modal, {
+            opacity: 0,
+            scale: 0.8,
+            duration: 0.5,
+            ease: "power2.in",
+            onComplete: function() {
+              modal.classList.remove('open');
+              modal.classList.add('closed');
+              gsap.set(modal, { clearProps: "all" });
+              document.body.style.overflow = '';
+            }
+          });
+          modal.removeEventListener('click', closeModal);
+        };
+        
+        modal.addEventListener('click', closeModal);
+      }
+    };
+  });
+
+  // 4. Work modal (different from work list modal) - use inline handler
+  document.querySelectorAll('.works_item').forEach(item => {
+    item.onclick = function () {
+      const modal = item.querySelector('.works_modal');
+      if (!modal || !modal.classList.contains('closed')) return;
+      
+      document.body.style.overflow = 'hidden';
+      modal.classList.remove('closed');
+      modal.classList.add('open');
+      gsap.fromTo(modal, 
+        { opacity: 0, scale: 0.8 }, 
+        { opacity: 1, scale: 1, duration: 0.5, ease: "power2.out" }
+      );
+      
+      const closeModal = function(e) {
+        const modal = e.currentTarget;
+        gsap.to(modal, {
+          opacity: 0,
+          scale: 0.8,
+          duration: 0.5,
+          ease: "power2.in",
+          onComplete: function () {
+            modal.classList.remove('open');
+            modal.classList.add('closed');
+            gsap.set(modal, { clearProps: 'all' });
+            document.body.style.overflow = '';
+          }
+        });
+        modal.removeEventListener('click', closeModal);
+      };
+      
+      modal.addEventListener('click', closeModal);
+    };
+  });
+
+  console.log('✅ Exhibition detail scripts initialized');
+}
+
+function initHomePageScripts() {
+  console.log('Initializing home page scripts...');
+  
+  const logoWrap = document.querySelector(".logo_wrap");
+  
+  // Logo animation (only on first load, not Barba transitions)
+  if (logoWrap && !window.homeLogoAnimated) {
+    gsap.set(".logo_wrap", { opacity: 1 });
+    
+    const tl = gsap.timeline();
+    tl.from(".svg-letter", {
+      y: 400,
+      duration: 0.55,
+      opacity: 0,
+      stagger: 0.07,
+      ease: "expo.inOut"
+    });
+    tl.to(".logo_wrap", {
+      opacity: 0,
+      duration: 0.5,
+      delay: 1,
+      onComplete: () => {
+        logoWrap.style.display = "none";
+        ScrollTrigger.refresh();
+      }
+    });
+    
+    window.homeLogoAnimated = true; // Prevent re-running on Barba transitions
+  }
+  
+  // ScrollTrigger animations
+  gsap.registerPlugin(ScrollTrigger);
+  const scrollItems = document.querySelectorAll('.home_flex_item');
+  
+  if (scrollItems.length) {
+    scrollItems.forEach((item) => {
+      gsap.fromTo(
+        item, 
+        { opacity: 0, y: 100 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.8,
+          ease: "power2.out",
+          scrollTrigger: {
+            trigger: item,
+            start: "top 80%",
+            toggleActions: "play none none none",
+          }
+        }
+      );
+    });
+  }
+  
+  // Home grid/flex toggle
+  const homeContainer = document.querySelector('.home_inner');
+  const homeToggleButton = document.querySelector('.nav_toggle');
+  
+  if (!homeContainer || !homeToggleButton) {
+    console.log('Home toggle elements not found, skipping...');
+    return;
+  }
+  
+  const homeItems = document.querySelectorAll('.home_item');
+  let isHomeGridView = false;
+  
+  function resetHomeTransformations() {
+    homeItems.forEach(item => {
+      gsap.set(item, { clearProps: "all" });
+    });
+  }
+  
+  function showHomeGridView() {
+    console.log("Switching to Home Grid View");
+    
+    gsap.killTweensOf(homeItems);
+    gsap.killTweensOf(homeContainer);
+    
+    gsap.to(homeItems, {
+      scale: 0.9,
+      opacity: 0,
+      duration: 0.5,
+      ease: "power2.inOut",
+      onComplete: () => {
+        window.scrollTo(0, 0);
+        
+        // Switch layout classes
+        homeContainer.classList.remove('u-vflex-left-top');
+        homeContainer.classList.add('u-grid-custom');
+        
+        // Add .no-margin to captions
+        homeItems.forEach(item => {
+          const captionWrap = item.querySelector('.home_caption_wrap');
+          if (captionWrap) {
+            captionWrap.classList.add('no-margin');
+          }
+        });
+        
+        // Animate back in
+        gsap.fromTo(homeItems,
+          { opacity: 0, y: 30, scale: 0.9 },
+          {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            duration: 0.8,
+            ease: "power2.out",
+            stagger: 0.1
+          }
+        );
+        
+        isHomeGridView = true;
+      }
+    });
+  }
+  
+  function showHomeFullScreenView() {
+    console.log("Switching to Home Full-Screen Flex Layout");
+    
+    gsap.killTweensOf(homeItems);
+    gsap.killTweensOf(homeContainer);
+    
+    gsap.to(homeItems, {
+      scale: 0.9,
+      opacity: 0,
+      duration: 0.5,
+      ease: "power2.inOut",
+      onComplete: () => {
+        // Switch layout classes
+        homeContainer.classList.remove('u-grid-custom');
+        homeContainer.classList.add('u-vflex-left-top');
+        
+        // Remove .no-margin from captions
+        homeItems.forEach(item => {
+          const captionWrap = item.querySelector('.home_caption_wrap');
+          if (captionWrap) {
+            captionWrap.classList.remove('no-margin');
+          }
+        });
+        
+        // Animate back in
+        gsap.fromTo(homeItems,
+          { opacity: 0, y: 30, scale: 0.9 },
+          {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            duration: 0.8,
+            ease: "power2.out",
+            stagger: 0.1
+          }
+        );
+        
+        isHomeGridView = false;
+      }
+    });
+  }
+  
+  // Event delegation for toggle button
+  if (window.homeToggleHandler) {
+    document.removeEventListener('click', window.homeToggleHandler);
+  }
+  
+  window.homeToggleHandler = function(e) {
+    if (e.target.closest('.nav_toggle')) {
+      console.log("Home Toggle Button Clicked");
+      if (isHomeGridView) {
+        showHomeFullScreenView();
+      } else {
+        showHomeGridView();
+      }
+    }
+  };
+  
+  document.addEventListener('click', window.homeToggleHandler);
+  
+  console.log('✅ Home page scripts initialized');
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   6. BARBA.JS PAGE TRANSITIONS
+   ═══════════════════════════════════════════════════════════════════════════
+   
+   Handles smooth page transitions without full page reloads (SPA-like).
+   Injects page-specific CSS dynamically and re-initializes scripts after
+   each transition.
+   
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+// Ensure .page_main fades in on first page load (before Barba takes over)
+(function() {
+  window.addEventListener('load', function() {
+    const pageMain = document.querySelector('.page_main');
+    if (pageMain) {
+      const currentOpacity = getComputedStyle(pageMain).opacity;
+      console.log('Initial .page_main opacity:', currentOpacity);
+      
+      // Fade in smoothly with GSAP
+      gsap.to(pageMain, {
+        opacity: 1,
+        duration: 0.5,
+        ease: 'power2.out'
+      });
+      console.log('Fading in .page_main on initial load');
+    }
+  });
+})();
+
+/* ───────────────────────────────────────────────────────────────────────────
+   injectPageSpecificCSS() - Dynamic CSS Injection
+   ─────────────────────────────────────────────────────────────────────────── 
+   Detects page type from URL and injects appropriate CSS:
+   - home: Nav headroom styles
+   - artist-detail: Headroom, nav styles
+   - exhibition-detail: Headroom, alternating work layout, image sizing
+   - exhibitions-list: Stagger animation states, thumbnail hiding
+   - artists-list: Stagger animation states
+   
+   Removes old page-specific styles before injecting new ones.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function injectPageSpecificCSS(pathname) {
+  let namespace = 'default';
+  
+  if (pathname === '/' || pathname === '') {
+    namespace = 'home';
+  } else if (pathname.includes('/artists/') && !pathname.endsWith('/artists')) {
+    namespace = 'artist-detail';
+  } else if (pathname === '/artists' || pathname === '/artists/') {
+    namespace = 'artists-list';
+  } else if (pathname.includes('/exhibitions/') && !pathname.endsWith('/exhibitions')) {
+    namespace = 'exhibition-detail';
+  } else if (pathname === '/exhibitions' || pathname === '/exhibitions/') {
+    namespace = 'exhibitions-list';
+  } else if (pathname === '/contact' || pathname === '/contact/') {
+    namespace = 'contact';
+  }
+  
+  console.log('Injecting CSS for namespace:', namespace, 'pathname:', pathname);
+  
+  // Remove old page-specific styles
+  const oldStyles = document.querySelectorAll('style[data-page-specific]');
+  console.log('Removing', oldStyles.length, 'old page-specific styles');
+  oldStyles.forEach(el => el.remove());
+  
+  // Define page-specific CSS
+  let pageSpecificCSS = '';
+  
+  switch(namespace) {
+    case 'artists-list':
+      pageSpecificCSS = `
+        /* Exhibition item initial state for stagger animation */
+        .g_exhibition_item_inner {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+      `;
+      break;
+      
+    case 'artist-detail':
+      pageSpecificCSS = `
+        /* Nav - Headroom transitions */
+        #nav {
+          transition: transform 0.5s ease;
+          will-change: transform;
+        }
+
+        .nav-pinned {
+          transform: translateY(0);
+        }
+
+        .nav-unpinned {
+          transform: translateY(calc(-1 * var(--size--12rem)));
+        }
+
+        /* For tablet and mobile devices */
+        @media screen and (max-width: 991px) {
+          .nav-unpinned {
+            transform: translateY(calc(-1 * var(--size--24rem)));
+          }
+        }
+
+        /* Artist works image sizing (step-by-step, no masonry) */
+        .artist_works_layout .artist_works_item:first-child .artist_works_img_wrap {
+          width: 100%;
+        }
+        .artist_works_layout .artist_works_item:not(:first-child) .artist_works_img_wrap {
+          width: auto;
+          max-height: calc(100vh - var(--padding-vertical--small));
+        }
+        /* Shrink images to fit inside wrapper */
+        .artist_works_layout .artist_works_img_wrap .artist_works_img {
+          max-width: 100%;
+          max-height: 100%;
+          height: auto;
+          width: auto;
+          display: block;
+          object-fit: contain;
+        }
+        /* Artist works alignment (class-driven, randomized via JS) */
+        .artist_works_layout .artist_works_item {
+          display: flex;
+          flex-direction: column;
+          opacity: 0;
+        }
+        .artist_works_layout .artist_works_item.align-left { align-items: flex-start; }
+        .artist_works_layout .artist_works_item.align-center { align-items: center; }
+        .artist_works_layout .artist_works_item.align-right { align-items: flex-end; }
+      `;
+      break;
+      
+    case 'exhibition-detail':
+      pageSpecificCSS = `
+        /* Initial state for fade-in animation */
+        .page_main {
+          opacity: 0;
+        }
+        
+        /* Nav - Headroom transitions */
+        #nav {
+          transition: transform 0.5s ease;
+          will-change: transform;
+        }
+
+        .nav-pinned {
+          transform: translateY(0);
+        }
+
+        .nav-unpinned {
+          transform: translateY(calc(-1 * var(--size--12rem)));
+        }
+
+        /* For tablet and mobile devices */
+        @media screen and (max-width: 991px) {
+          .nav-unpinned {
+            transform: translateY(calc(-1 * var(--size--24rem)));
+          }
+        }
+        
+        /* Works item alternating layout */
+        .works_item:nth-child(odd) .works_img_wrap {
+          order: 1;
+        }
+        .works_item:nth-child(odd) .works_caption_wrap {
+          order: 2;
+        }
+
+        .works_item:nth-child(even) .works_img_wrap {
+          order: 2;
+        }
+        .works_item:nth-child(even) .works_caption_wrap {
+          order: 1;
+        }
+        
+        /* Desktop only - scaled down images limited to 100vh */
+        @media (min-width: 992px) {
+          img.show_img[image-display="scaled down"] {
+            max-height: 100vh !important;
+            width: auto !important;
+            height: auto !important;
+            object-fit: scale-down !important;
+            max-width: 100% !important;
+          }
+        }
+
+        /* Fullscreen images - no restrictions */
+        img.show_img[image-display="fullscreen"] {
+          /* Let images be their natural size */
+        }
+      `;
+      break;
+      
+    case 'exhibitions-list':
+      pageSpecificCSS = `
+        /* Hide exhibition parent items initially */
+        .g_exhibition_item {
+          opacity: 0;
+        }
+
+        /* Show after animations are ready */
+        body.animations-ready .g_exhibition_item {
+          opacity: 1;
+        }
+
+        /* Set initial state for stagger animation */
+        .g_exhibition_item_inner {
+          opacity: 0;
+          transform: translateY(20px);
+        }
+
+        /* Hide preview thumbnails by default (desktop) */
+        .g_preview_thumb_wrap {
+          opacity: 0;
+          visibility: hidden;
+          pointer-events: none;
+        }
+        
+        /* Show thumbnails on mobile/tablet */
+        @media (max-width: 1024px) {
+          .g_preview_thumb_wrap {
+            opacity: 1 !important;
+            visibility: visible !important;
+            pointer-events: auto !important;
+          }
+          .g_preview_thumb_wrap .g_image {
+            opacity: 1 !important;
+            visibility: visible !important;
+          }
+        }
+        
+        /* Artist name divider logic */
+        .artist_name_outer .g_artist_divider { 
+          display: none; 
+        }
+        .artist_name_outer .w-dyn-item:not(:last-child) .g_artist_divider { 
+          display: inline; 
+        }
+      `;
+      break;
+      
+    case 'home':
+      pageSpecificCSS = `
+        /* Nav - Headroom transitions */
+        #nav {
+          transition: transform 0.5s ease;
+          will-change: transform;
+        }
+
+        .nav-pinned {
+          transform: translateY(0);
+        }
+
+        .nav-unpinned {
+          transform: translateY(calc(-1 * var(--size--12rem)));
+        }
+
+        /* For tablet and mobile devices */
+        @media screen and (max-width: 991px) {
+          .nav-unpinned {
+            transform: translateY(calc(-1 * var(--size--24rem)));
+          }
+        }
+      `;
+      break;
+  }
+  
+  // Inject the CSS (always, not just if > 100 chars)
+  if (pageSpecificCSS.trim()) {
+    const style = document.createElement('style');
+    style.setAttribute('data-page-specific', 'true');
+    style.textContent = pageSpecificCSS;
+    document.head.appendChild(style);
+    console.log('✅ Injected CSS for namespace:', namespace);
+  }
+  
+  return namespace;
+}
+
+// Set namespace and initialize scripts on first load
+(function() {
+  document.addEventListener('DOMContentLoaded', function() {
+    const container = document.querySelector('[data-barba="container"]');
+    if (!container) return;
+    
+    const pathname = window.location.pathname;
+    const namespace = injectPageSpecificCSS(pathname);
+    
+    container.setAttribute('data-barba-namespace', namespace);
+    console.log('Barba namespace set to:', namespace);
+    
+    // Initialize all page scripts
+    initPageScripts();
+  });
+})();
+
+// Initialize Barba.js
+barba.init({
+  transitions: [{
+    name: 'fade-transition',
+    
+    leave(data) {
+      console.log('Barba: leaving page');
+      // Fade out the old page
+      return gsap.to(data.current.container, {
+        opacity: 0,
+        duration: 0.3,
+        ease: 'power2.inOut'
+      });
+    },
+    
+    enter(data) {
+      console.log('Barba: entering new page');
+      // Scroll to top
+      window.scrollTo(0, 0);
+      
+      const container = data.next.container;
+      
+      // Make sure container is visible first
+      container.style.visibility = 'visible';
+      
+      // Simple fade in - no font loading delays
+      return gsap.fromTo(container, 
+        { opacity: 0 },
+        { 
+          opacity: 1, 
+          duration: 0.3, 
+          ease: 'power2.inOut' 
+        }
+      );
+    },
+    
+    after(data) {
+      // Ensure fonts-loaded class stays on html element
+      document.documentElement.classList.add('fonts-loaded');
+      
+      // Inject page-specific CSS and set namespace
+      const pathname = window.location.pathname;
+      const namespace = injectPageSpecificCSS(pathname);
+      const newContainer = data.next.container;
+      newContainer.setAttribute('data-barba-namespace', namespace);
+      
+      // Re-initialize all page scripts
+      initPageScripts();
+      
+      // Re-run Webflow interactions WITHOUT triggering page load animations
+      if (window.Webflow) {
+        // Destroy old instance
+        window.Webflow.destroy();
+        
+        // Re-init but DON'T trigger page load events
+        window.Webflow.ready();
+        
+        // Only init ix2 for interactions (not page loads)
+        if (window.Webflow.require) {
+          const ix2 = window.Webflow.require('ix2');
+          if (ix2) {
+            // Init without triggering COMPONENT_ACTIVE events
+            ix2.init();
+          }
+        }
+      }
+      
+      console.log('Barba: Page transition complete, Webflow re-initialized');
+    }
+  }],
+  
+  // Prevent transition on same page
+  prevent: ({ el }) => el.classList && el.classList.contains('no-barba')
+});
+
+console.log('Barba.js initialized with fade transition');
