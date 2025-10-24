@@ -1794,6 +1794,19 @@ function injectPageSpecificCSS(pathname) {
         .artist_works_layout .artist_works_item.align-left { align-items: flex-start; }
         .artist_works_layout .artist_works_item.align-center { align-items: center; }
         .artist_works_layout .artist_works_item.align-right { align-items: flex-end; }
+        
+        /* Show exhibition preview thumbnails on mobile/tablet (no hover) */
+        @media (max-width: 1024px) {
+          .g_preview_thumb_wrap {
+            opacity: 1 !important;
+            visibility: visible !important;
+            pointer-events: auto !important;
+          }
+          .g_preview_thumb_wrap .g_image {
+            opacity: 1 !important;
+            visibility: visible !important;
+          }
+        }
       `;
       break;
       
