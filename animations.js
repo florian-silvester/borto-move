@@ -250,21 +250,22 @@ function initExhibitionHoverThumbnails() {
           });
         }
 
-        // Animate the current thumbnail into view
-        gsap.to(previewThumb, { 
-          opacity: 1, 
-          y: 0, 
-          visibility: 'visible', 
+        // Animate the thumbnail FROM offset position to its natural position
+        gsap.set(previewThumb, { visibility: 'visible', opacity: 1, y: 0 });
+        gsap.from(previewThumb, { 
+          opacity: 0, 
+          y: 50, 
           duration: 0.9,
-          ease: "circ.out" 
+          ease: "circ.out"
         });
 
-        // Fade in title sticky if it exists
+        // Fade in title sticky FROM offset if it exists
         if (titleSticky) {
-          gsap.to(titleSticky, { 
-            opacity: 1, 
+          gsap.set(titleSticky, { opacity: 1 });
+          gsap.from(titleSticky, { 
+            opacity: 0, 
             duration: 0.9,
-            ease: "circ.out" 
+            ease: "circ.out"
           });
         }
 
@@ -276,7 +277,7 @@ function initExhibitionHoverThumbnails() {
       const hoverLeave = () => {
         gsap.to(previewThumb, { 
           opacity: 0, 
-          y: 50, 
+          y: 30, 
           visibility: 'hidden', 
           duration: 0.9,
           ease: "circ.out" 
