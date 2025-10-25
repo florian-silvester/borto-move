@@ -225,11 +225,19 @@ function initExhibitionHoverThumbnails() {
       gsap.set(previewThumb, { opacity: 0, y: 50, visibility: 'hidden' });
     });
 
-    items.forEach((item) => {
-      // Get the associated preview thumbnail
-      const previewThumb = item.closest('.g_exhibition_item').querySelector('.g_preview_thumb_wrap');
+    // Hide all title stickies by default
+    const titleStickies = document.querySelectorAll('.exhibition_title_sticky');
+    titleStickies.forEach((titleSticky) => {
+      gsap.set(titleSticky, { opacity: 0 });
+    });
 
-      // Show thumbnail when mouse enters
+    items.forEach((item) => {
+      // Get the associated preview thumbnail and title sticky
+      const exhibitionItem = item.closest('.g_exhibition_item');
+      const previewThumb = exhibitionItem.querySelector('.g_preview_thumb_wrap');
+      const titleSticky = exhibitionItem.querySelector('.exhibition_title_sticky');
+
+      // Show thumbnail and title sticky when mouse enters
       const hoverEnter = () => {
         // If a different thumbnail is already visible, hide it first
         if (lastPreviewThumb && lastPreviewThumb !== previewThumb) {
@@ -251,11 +259,20 @@ function initExhibitionHoverThumbnails() {
           ease: "circ.out" 
         });
 
+        // Fade in title sticky if it exists
+        if (titleSticky) {
+          gsap.to(titleSticky, { 
+            opacity: 1, 
+            duration: 0.9,
+            ease: "circ.out" 
+          });
+        }
+
         // Update the reference to the currently visible thumbnail
         lastPreviewThumb = previewThumb;
       };
 
-      // Hide thumbnail when mouse leaves the item
+      // Hide thumbnail and title sticky when mouse leaves the item
       const hoverLeave = () => {
         gsap.to(previewThumb, { 
           opacity: 0, 
@@ -264,6 +281,16 @@ function initExhibitionHoverThumbnails() {
           duration: 0.9,
           ease: "circ.out" 
         });
+        
+        // Fade out title sticky if it exists
+        if (titleSticky) {
+          gsap.to(titleSticky, { 
+            opacity: 0, 
+            duration: 0.9,
+            ease: "circ.out" 
+          });
+        }
+        
         if (lastPreviewThumb === previewThumb) {
           lastPreviewThumb = null;
         }
@@ -283,11 +310,17 @@ function initExhibitionHoverThumbnails() {
   }
 
   function setupMobile() {
-    // For mobile/tablet, clear GSAP inline styles (making thumbnails visible by default)
+    // For mobile/tablet, clear GSAP inline styles (making thumbnails and titles visible by default)
     const previewThumbs = document.querySelectorAll('.g_preview_thumb_wrap');
     previewThumbs.forEach(previewThumb => {
       gsap.set(previewThumb, { clearProps: 'all' });
     });
+    
+    const titleStickies = document.querySelectorAll('.exhibition_title_sticky');
+    titleStickies.forEach(titleSticky => {
+      gsap.set(titleSticky, { clearProps: 'all' });
+    });
+    
     lastPreviewThumb = null;
   }
 
@@ -741,7 +774,8 @@ function initThemeToggle() {
 
 function initYearFormatter() {
   // Year formatting logic - runs on page load
-  setTimeout(function() {
+  // Apply immediately (pre-animation) to avoid flicker
+  requestAnimationFrame(function() {
     const exhibitionDates = document.querySelectorAll('.g_exhibition_item .g_date');
     const cvDates = document.querySelectorAll('.cv_entry .g_date');
 
@@ -791,7 +825,7 @@ function initYearFormatter() {
 
     updateDateDisplay();
     window.addEventListener('resize', updateDateDisplay);
-  }, 100);
+  });
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
@@ -1971,6 +2005,26 @@ function injectPageSpecificCSS(pathname) {
     
     // Initialize all page scripts
     initPageScripts();
+
+    // Also run nav intro animation on hard refresh (no Barba transition yet)
+    try {
+      const navWrap = document.querySelector('.nav_wrap');
+      const title = document.querySelector('.nav_wrap .nav_title_wrap');
+      if (navWrap) {
+        const navChildren = Array.from(document.querySelectorAll('.nav_wrap .nav_layout > *'))
+          .filter(el => !el.classList.contains('nav_title_wrap'));
+        if (title && getComputedStyle(title).opacity === '1') gsap.set(title, { opacity: 0 });
+        navChildren.forEach(el => {
+          if (getComputedStyle(el).opacity === '1') gsap.set(el, { opacity: 0 });
+        });
+        const tl = gsap.timeline();
+        if (navChildren.length) tl.to(navChildren, { opacity: 1, duration: 0.35, stagger: 0.08, ease: 'power1.out' }, 0.15);
+        if (title) tl.to(title, { opacity: 1, duration: 0.45, ease: 'power1.out' }, '+=0.25');
+        tl.to({}, { duration: 0.5 }); // same pause for refresh
+      }
+    } catch (e) {
+      console.log('Initial nav intro error:', e);
+    }
   });
 })();
 
@@ -1995,53 +2049,109 @@ barba.init({
       window.scrollTo(0, 0);
       
       const container = data.next.container;
+      const navWrap = document.querySelector('.nav_wrap');
+      const pageMain = container.querySelector('.page_main');
       
-      // Make sure container is visible first
+      // Make container visible
       container.style.visibility = 'visible';
+      gsap.set(container, { opacity: 1 });
       
-      // Simple fade in - no font loading delays
-      return gsap.fromTo(container, 
-        { opacity: 0 },
-        { 
-          opacity: 1, 
-          duration: 0.3, 
-          ease: 'power2.inOut' 
+      // Do not hide page content here; existing page-level staggers depend on it
+      
+      /* NAV SIMPLE FADE SEQUENCE (no transforms/height changes) */
+      
+      if (navWrap) {
+        console.log('🎬 Starting nav simple fade sequence');
+        
+        // Temporarily disable Headroom during transition
+        const nav = document.getElementById('nav');
+        if (nav && nav.headroomInstance) {
+          nav.headroomInstance.freeze();
+          console.log('  Headroom frozen');
         }
-      );
+        
+        // Get elements
+        const actualHeight = navWrap.offsetHeight;
+        const navTitleWrap = navWrap.querySelector('.nav_title_wrap');
+        const navDropdownWrap = navWrap.querySelector('.nav_dropdown_wrap');
+        const navBackground = navWrap.querySelector('.nav_background, .nav_background_mobile');
+        
+        console.log('  Original nav height:', actualHeight + 'px');
+        console.log('  Nav title wrap found:', !!navTitleWrap);
+        console.log('  Nav dropdown wrap found:', !!navDropdownWrap);
+        console.log('  Nav background found:', !!navBackground);
+        
+        if (navTitleWrap) {
+          const titleStyles = window.getComputedStyle(navTitleWrap);
+          console.log('  Title position:', titleStyles.position, 'top:', titleStyles.top);
+        }
+        
+        // Defer nav fade to Barba after() so Webflow/Headroom cannot override
+        // Here we only ensure the nav is visible (content will fade later)
+        gsap.set(navWrap, { opacity: 1 });
+        return;
+      } else {
+        // SIMPLE FADE-IN (No nav animation) - Uncomment this to disable nav animation
+        /*
+        if (pageMain) {
+          await gsap.to(pageMain, { 
+            opacity: 1, 
+            duration: 0.5, 
+            ease: 'power2.out' 
+          });
+        }
+        */
+      }
     },
     
     after(data) {
       // Ensure fonts-loaded class stays on html element
       document.documentElement.classList.add('fonts-loaded');
-      
+
       // Inject page-specific CSS and set namespace
       const pathname = window.location.pathname;
       const namespace = injectPageSpecificCSS(pathname);
       const newContainer = data.next.container;
       newContainer.setAttribute('data-barba-namespace', namespace);
-      
-      // Re-initialize all page scripts
-      initPageScripts();
-      
-      // Re-run Webflow interactions WITHOUT triggering page load animations
-      if (window.Webflow) {
-        // Destroy old instance
-        window.Webflow.destroy();
-        
-        // Re-init but DON'T trigger page load events
-        window.Webflow.ready();
-        
-        // Only init ix2 for interactions (not page loads)
-        if (window.Webflow.require) {
-          const ix2 = window.Webflow.require('ix2');
-          if (ix2) {
-            // Init without triggering COMPONENT_ACTIVE events
-            ix2.init();
+
+      // Helper to run the original page setup (page-level animations, Webflow re-init)
+      function runPageInit() {
+        initPageScripts();
+        if (window.Webflow) {
+          window.Webflow.destroy();
+          window.Webflow.ready();
+          if (window.Webflow.require) {
+            const ix2 = window.Webflow.require('ix2');
+            if (ix2) ix2.init();
           }
         }
+        console.log('Barba: Page transition complete, Webflow re-initialized');
       }
-      
-      console.log('Barba: Page transition complete, Webflow re-initialized');
+
+      // Nav fade sequencing BEFORE page-level animations
+      try {
+        const navWrap = document.querySelector('.nav_wrap');
+        const title = document.querySelector('.nav_wrap .nav_title_wrap');
+        if (navWrap) {
+          const navChildren = Array.from(document.querySelectorAll('.nav_wrap .nav_layout > *'))
+            .filter(el => !el.classList.contains('nav_title_wrap'));
+          if (title && getComputedStyle(title).opacity === '1') gsap.set(title, { opacity: 0 });
+          navChildren.forEach(el => {
+            if (getComputedStyle(el).opacity === '1') gsap.set(el, { opacity: 0 });
+          });
+          const tl = gsap.timeline({ onComplete: runPageInit });
+          if (navChildren.length) tl.to(navChildren, { opacity: 1, duration: 0.35, stagger: 0.08, ease: 'power1.out' }, 0.15);
+          if (title) tl.to(title, { opacity: 1, duration: 0.45, ease: 'power1.out' }, '+=0.25');
+          // Small pause after title shows before triggering page animations
+          tl.to({}, { duration: 0.5 });
+          return; // defer init until timeline completes
+        }
+      } catch (e) {
+        console.log('Nav fade sequence error:', e);
+      }
+
+      // Fallback if nav not found
+      runPageInit();
     }
   }],
   
