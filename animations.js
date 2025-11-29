@@ -340,15 +340,6 @@ function initExhibitionHoverThumbnails() {
             }
           );
         }
-        
-        // Add .u-color-faded to all sibling items (to highlight the hovered one)
-        items.forEach((siblingItem) => {
-          if (siblingItem !== item) {
-            siblingItem.classList.add('u-color-faded');
-          } else {
-            siblingItem.classList.remove('u-color-faded');
-          }
-        });
 
         // Update the reference to the currently visible thumbnail
         lastPreviewThumb = previewThumb;
@@ -385,11 +376,6 @@ function initExhibitionHoverThumbnails() {
             ease: "circ.out" 
           });
         }
-        
-        // Remove .u-color-faded from all items when leaving
-        items.forEach((siblingItem) => {
-          siblingItem.classList.remove('u-color-faded');
-        });
         
         if (lastPreviewThumb === previewThumb) {
           lastPreviewThumb = null;
