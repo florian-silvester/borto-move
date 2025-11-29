@@ -446,6 +446,32 @@ function initExhibitionHoverThumbnails() {
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
+   initArtistNameHover() - Fade artist name on nav link hover
+   ─────────────────────────────────────────────────────────────────────────── 
+   When hovering .nav_artist_link_inner, adds .u-color-faded to sibling .g_artist_name
+   ─────────────────────────────────────────────────────────────────────────── */
+
+function initArtistNameHover() {
+  const navLinks = document.querySelectorAll('.nav_artist_link_inner');
+  if (!navLinks.length) return;
+
+  navLinks.forEach((link) => {
+    const parent = link.parentElement;
+    const artistName = parent ? parent.querySelector('.g_artist_name') : null;
+    
+    if (!artistName) return;
+
+    link.addEventListener('mouseenter', () => {
+      artistName.classList.add('u-color-faded');
+    });
+
+    link.addEventListener('mouseleave', () => {
+      artistName.classList.remove('u-color-faded');
+    });
+  });
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
    initNewsHoverThumbnails() - Preview Thumbnail Hover (News Page)
    ─────────────────────────────────────────────────────────────────────────── 
    Shows/hides preview thumbnails on hover for news items.
@@ -1128,6 +1154,7 @@ function initPageScripts() {
   initCVCleanup();
   initExhibitionSorting();
   initNewsHoverThumbnails(); // News items can appear on multiple pages
+  initArtistNameHover(); // Fade artist name on nav link hover
   
   // Page-specific scripts
   if (isArtistsList || isExhibitionsList || isArtistPage || isNewsPage || isOldHome || isHome || isHomeBottom) {
