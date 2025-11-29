@@ -1451,69 +1451,14 @@ function initCVCleanup() {
 /* ───────────────────────────────────────────────────────────────────────────
    initExhibitionSorting() - Artist/Year Sort Toggle (Exhibition Lists)
    ─────────────────────────────────────────────────────────────────────────── 
-   Enables sorting of exhibition list by artist name or chronologically.
-   - Toggle buttons: #Artist and #Year
-   - Sorts .g_exhibition_layout children by nested .g_last_name text
-   - Toggles between A-Z / Z-A on each click
-   - Uses event delegation for Barba compatibility
+   DISABLED - Use Finsweet CMS Sort instead for proper pagination support.
+   Finsweet handles loading all items and sorting without breaking pagination.
    ─────────────────────────────────────────────────────────────────────────── */
 
 function initExhibitionSorting() {
-  let sortAscArtist = true;
-  let sortAscYear = true;
-
-  function sortByArtist(sortAsc) {
-    const container = document.querySelector('.g_exhibition_layout');
-    if (!container) return;
-    
-    const items = Array.from(container.children);
-    items.sort(function(a, b) {
-      const aName = a.querySelector('.g_last_name');
-      const bName = b.querySelector('.g_last_name');
-      const aVal = aName ? aName.textContent.trim().toLowerCase() : '';
-      const bVal = bName ? bName.textContent.trim().toLowerCase() : '';
-      
-      return sortAsc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-    });
-    items.forEach(item => container.appendChild(item));
-  }
-
-  function sortByYear(sortAsc) {
-    const container = document.querySelector('.g_exhibition_layout');
-    if (!container) return;
-    
-    const items = Array.from(container.children);
-    items.sort(function(a, b) {
-      const aDate = a.querySelector('.g_date');
-      const bDate = b.querySelector('.g_date');
-      // Extract year from date text (e.g., "2024" or "01.01.2024")
-      const aYear = aDate ? parseInt(aDate.textContent.match(/\d{4}/)?.[0] || '0') : 0;
-      const bYear = bDate ? parseInt(bDate.textContent.match(/\d{4}/)?.[0] || '0') : 0;
-      
-      return sortAsc ? aYear - bYear : bYear - aYear;
-    });
-    items.forEach(item => container.appendChild(item));
-  }
-
-  // Event delegation - remove old listener
-  if (window.exhibitionSortHandler) {
-    document.removeEventListener('click', window.exhibitionSortHandler);
-  }
-  
-  window.exhibitionSortHandler = function(e) {
-    const artistBtn = e.target.closest('#Artist');
-    const yearBtn = e.target.closest('#Year');
-    
-    if (artistBtn) {
-      sortByArtist(sortAscArtist);
-      sortAscArtist = !sortAscArtist;
-    } else if (yearBtn) {
-      sortByYear(sortAscYear);
-      sortAscYear = !sortAscYear;
-    }
-  };
-  
-  document.addEventListener('click', window.exhibitionSortHandler);
+  // Sorting disabled - use Finsweet CMS Sort attributes instead
+  // fs-cmssort-element="trigger" and fs-cmssort-field on buttons
+  // fs-cmsload-element="list" on the list container
 }
 
 
