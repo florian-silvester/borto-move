@@ -452,14 +452,15 @@ function initExhibitionHoverThumbnails() {
    ─────────────────────────────────────────────────────────────────────────── */
 
 function initArtistNameHover() {
-  const navLinks = document.querySelectorAll('.nav_artist_link_inner');
+  // Select the anchor links inside .nav_artist_link
+  const navLinks = document.querySelectorAll('.nav_artist_link a');
   if (!navLinks.length) return;
 
   navLinks.forEach((link) => {
-    const parent = link.parentElement;
-    const artistName = parent ? parent.querySelector('.g_artist_name') : null;
+    // .g_artist_name is the previous sibling (p element)
+    const artistName = link.previousElementSibling;
     
-    if (!artistName) return;
+    if (!artistName || !artistName.classList.contains('g_artist_name')) return;
 
     link.addEventListener('mouseenter', () => {
       artistName.classList.add('u-color-faded');
