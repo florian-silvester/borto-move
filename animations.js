@@ -2815,8 +2815,9 @@ function injectPageSpecificCSS(pathname) {
           width: 100%;
         }
         .artist_works_layout .artist_works_item:not(:first-child) .artist_works_img_wrap {
-          width: auto;
-          max-height: calc(100vh - var(--padding-vertical--small));
+          max-width: 100% !important;
+          width: fit-content !important; /* Safari: let wrapper shrink to image */
+          max-height: 85vh !important;
         }
         /* Shrink images to fit inside wrapper */
         .artist_works_layout .artist_works_item:first-child .artist_works_img {
@@ -2828,11 +2829,11 @@ function injectPageSpecificCSS(pathname) {
         }
         .artist_works_layout .artist_works_item:not(:first-child) .artist_works_img {
           max-width: 100% !important;
-          max-height: 85vh !important; /* Safari fix: use vh directly, no calc/var */
+          max-height: 85vh !important;
           height: auto !important;
           width: auto !important;
-          display: block;
-          object-fit: contain;
+          display: block !important;
+          object-fit: contain !important;
         }
         /* Artist works alignment (class-driven, randomized via JS) */
         .artist_works_layout .artist_works_item {
