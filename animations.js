@@ -2819,11 +2819,18 @@ function injectPageSpecificCSS(pathname) {
           max-height: calc(100vh - var(--padding-vertical--small));
         }
         /* Shrink images to fit inside wrapper */
-        .artist_works_layout .artist_works_img_wrap .artist_works_img {
-          max-width: 100%;
-          max-height: 100%;
-          height: auto;
-          width: auto;
+        .artist_works_layout .artist_works_item:first-child .artist_works_img {
+          max-width: 100% !important;
+          height: auto !important;
+          width: 100% !important;
+          display: block;
+          object-fit: contain;
+        }
+        .artist_works_layout .artist_works_item:not(:first-child) .artist_works_img {
+          max-width: 100% !important;
+          max-height: 85vh !important; /* Safari fix: use vh directly, no calc/var */
+          height: auto !important;
+          width: auto !important;
           display: block;
           object-fit: contain;
         }
