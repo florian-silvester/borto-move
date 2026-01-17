@@ -446,33 +446,6 @@ function initExhibitionHoverThumbnails() {
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
-   initArtistNameHover() - Fade artist name on nav link hover
-   ─────────────────────────────────────────────────────────────────────────── 
-   When hovering .nav_artist_link_inner, adds .u-color-faded to sibling .g_artist_name
-   ─────────────────────────────────────────────────────────────────────────── */
-
-function initArtistNameHover() {
-  // Select the anchor links inside .nav_artist_link
-  const navLinks = document.querySelectorAll('.nav_artist_link a');
-  if (!navLinks.length) return;
-
-  navLinks.forEach((link) => {
-    // .g_artist_name is the previous sibling (p element)
-    const artistName = link.previousElementSibling;
-    
-    if (!artistName || !artistName.classList.contains('g_artist_name')) return;
-
-    link.addEventListener('mouseenter', () => {
-      artistName.classList.add('u-color-faded');
-    });
-
-    link.addEventListener('mouseleave', () => {
-      artistName.classList.remove('u-color-faded');
-    });
-  });
-}
-
-/* ───────────────────────────────────────────────────────────────────────────
    initNewsHoverThumbnails() - Preview Thumbnail Hover (News Page)
    ─────────────────────────────────────────────────────────────────────────── 
    Shows/hides preview thumbnails on hover for news items.
@@ -1155,7 +1128,6 @@ function initPageScripts() {
   initCVCleanup();
   initExhibitionSorting();
   initNewsHoverThumbnails(); // News items can appear on multiple pages
-  initArtistNameHover(); // Fade artist name on nav link hover
   
   // Page-specific scripts
   if (isArtistsList || isExhibitionsList || isArtistPage || isNewsPage || isOldHome || isHome || isHomeBottom) {
@@ -1452,14 +1424,57 @@ function initCVCleanup() {
 /* ───────────────────────────────────────────────────────────────────────────
    initExhibitionSorting() - Artist/Year Sort Toggle (Exhibition Lists)
    ─────────────────────────────────────────────────────────────────────────── 
-   DISABLED - Use Finsweet CMS Sort instead for proper pagination support.
-   Finsweet handles loading all items and sorting without breaking pagination.
+   Enables sorting of exhibition list by artist name or start date.
+   - Toggle buttons: #Artist and #Year
+   - Sorts .g_exhibitions_collection children
+   - Reads data-artist and data-start-date attributes
+   - Toggles between ascending/descending on each click
+   - Uses event delegation for Barba compatibility
    ─────────────────────────────────────────────────────────────────────────── */
 
 function initExhibitionSorting() {
-  // Sorting disabled - use Finsweet CMS Sort attributes instead
-  // fs-cmssort-element="trigger" and fs-cmssort-field on buttons
-  // fs-cmsload-element="list" on the list container
+  let sortAscArtist = true;
+  let sortAscStartDate = true;
+
+  function sortItems(attribute, sortAsc) {
+    const container = document.querySelector('.g_exhibitions_collection');
+    if (!container) return;
+    
+    const items = Array.from(container.children);
+    items.sort(function(a, b) {
+      let aVal = a.getAttribute('data-' + attribute);
+      let bVal = b.getAttribute('data-' + attribute);
+      
+      if (attribute === 'start-date') {
+        let aTime = new Date(aVal).getTime();
+        let bTime = new Date(bVal).getTime();
+        if (isNaN(aTime) || isNaN(bTime)) return 0;
+        return sortAsc ? aTime - bTime : bTime - aTime;
+      }
+      return sortAsc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+    });
+    items.forEach(item => container.appendChild(item));
+  }
+
+  // Event delegation - remove old listener
+  if (window.exhibitionSortHandler) {
+    document.removeEventListener('click', window.exhibitionSortHandler);
+  }
+  
+  window.exhibitionSortHandler = function(e) {
+    const artistBtn = e.target.closest('#Artist');
+    const yearBtn = e.target.closest('#Year');
+    
+    if (artistBtn) {
+      sortItems("artist", sortAscArtist);
+      sortAscArtist = !sortAscArtist;
+    } else if (yearBtn) {
+      sortItems("start-date", sortAscStartDate);
+      sortAscStartDate = !sortAscStartDate;
+    }
+  };
+  
+  document.addEventListener('click', window.exhibitionSortHandler);
 }
 
 
@@ -2439,19 +2454,101 @@ function initOldHomePageScripts() {
    initHomePageScripts() - Home Page Animations
    ─────────────────────────────────────────────────────────────────────────── 
    Modified sequence: Logo animation first → Logo fade out → Image fade in
+   Features: Random starting image + crossfade slideshow between featured images
    ─────────────────────────────────────────────────────────────────────────── */
 
 function initHomePageScripts() {
   console.log('Initializing home page scripts...');
   
   const logoWrap = document.querySelector(".logo_wrap");
-  const homeImg = document.querySelector(".home_img");
+  const homeItems = document.querySelectorAll(".home_item");
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FEATURED IMAGE SLIDESHOW - Random start + crossfade cycle
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  let slideshowInterval = null;
+  let currentSlideIndex = 0;
+  const SLIDESHOW_DURATION = 6000; // 6 seconds per image
+  const FADE_DURATION = 1.2; // 1.2 second crossfade
+  
+  function initFeaturedSlideshow() {
+    if (homeItems.length <= 1) {
+      console.log('Only one home_item found, no slideshow needed');
+      return;
+    }
+    
+    console.log(`Found ${homeItems.length} home_items, initializing slideshow...`);
+    
+    // Pick random starting index
+    currentSlideIndex = Math.floor(Math.random() * homeItems.length);
+    console.log(`Starting slideshow at random index: ${currentSlideIndex}`);
+    
+    // Set all items to opacity 0 initially, except the random starting one
+    homeItems.forEach((item, index) => {
+      gsap.set(item, { 
+        opacity: index === currentSlideIndex ? 1 : 0,
+        zIndex: index === currentSlideIndex ? 2 : 1
+      });
+    });
+    
+    // Start the slideshow cycle
+    slideshowInterval = setInterval(nextSlide, SLIDESHOW_DURATION);
+  }
+  
+  function nextSlide() {
+    if (homeItems.length <= 1) return;
+    
+    const currentItem = homeItems[currentSlideIndex];
+    const nextIndex = (currentSlideIndex + 1) % homeItems.length;
+    const nextItem = homeItems[nextIndex];
+    
+    // Bring next slide to front but keep it invisible
+    gsap.set(nextItem, { zIndex: 3, opacity: 0 });
+    
+    // Crossfade: fade in next, fade out current
+    gsap.to(nextItem, {
+      opacity: 1,
+      duration: FADE_DURATION,
+      ease: "power2.inOut"
+    });
+    
+    gsap.to(currentItem, {
+      opacity: 0,
+      duration: FADE_DURATION,
+      ease: "power2.inOut",
+      onComplete: () => {
+        // Reset z-index after transition
+        gsap.set(currentItem, { zIndex: 1 });
+        gsap.set(nextItem, { zIndex: 2 });
+      }
+    });
+    
+    currentSlideIndex = nextIndex;
+  }
+  
+  // Clean up slideshow on page leave (for Barba.js)
+  window.cleanupHomeSlideshow = function() {
+    if (slideshowInterval) {
+      clearInterval(slideshowInterval);
+      slideshowInterval = null;
+    }
+  };
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LOGO ANIMATION + INITIAL IMAGE REVEAL
+  // ═══════════════════════════════════════════════════════════════════════════
   
   // Logo animation plays FIRST (no delay)
   if (logoWrap) {
     // Reset logo for animation
     logoWrap.style.display = "block";
     gsap.set(".logo_wrap", { opacity: 1 });
+    
+    // Hide all home_items initially for the reveal
+    homeItems.forEach(item => {
+      gsap.set(item, { opacity: 0 });
+    });
     
     const tl = gsap.timeline(); // No delay - starts immediately
     
@@ -2467,9 +2564,18 @@ function initHomePageScripts() {
     // Logo stays visible longer (2 seconds)
     tl.to({}, { duration: 2 });
     
-    // Image fades in BEFORE logo starts fading out
-    if (homeImg) {
-      tl.fromTo(".home_img", 
+    // First image fades in BEFORE logo starts fading out
+    if (homeItems.length > 0) {
+      // Pick random starting image
+      currentSlideIndex = Math.floor(Math.random() * homeItems.length);
+      const firstItem = homeItems[currentSlideIndex];
+      
+      // Set z-index for proper layering
+      homeItems.forEach((item, index) => {
+        gsap.set(item, { zIndex: index === currentSlideIndex ? 2 : 1 });
+      });
+      
+      tl.fromTo(firstItem, 
         { 
           opacity: 0, 
           scale: 1.02 
@@ -2492,8 +2598,17 @@ function initHomePageScripts() {
       onComplete: () => {
         logoWrap.style.display = "none";
         ScrollTrigger.refresh();
+        
+        // Start slideshow AFTER logo animation completes
+        if (homeItems.length > 1) {
+          slideshowInterval = setInterval(nextSlide, SLIDESHOW_DURATION);
+          console.log('✅ Home featured slideshow started');
+        }
       }
     }, "-=0.6"); // Start while image is still fading in (overlap)
+  } else {
+    // No logo animation - just start slideshow directly
+    initFeaturedSlideshow();
   }
   
   // ScrollTrigger animations
@@ -3093,6 +3208,12 @@ barba.init({
     
     leave(data) {
       console.log('Barba: leaving page');
+      
+      // Cleanup home slideshow if running
+      if (typeof window.cleanupHomeSlideshow === 'function') {
+        window.cleanupHomeSlideshow();
+      }
+      
       // Fade out the old page
       return gsap.to(data.current.container, {
         opacity: 0,
