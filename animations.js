@@ -2548,6 +2548,41 @@ function initHomePageScripts() {
   // START SLIDESHOW IMMEDIATELY (independent of logo)
   initFeaturedSlideshow();
   
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LOGO ANIMATION (completely separate from slideshow)
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  if (logoWrap) {
+    // Reset logo for animation
+    logoWrap.style.display = "block";
+    gsap.set(".logo_wrap", { opacity: 1 });
+    
+    const tl = gsap.timeline();
+    
+    // Logo letters animate in
+    tl.from(".svg-letter", {
+      y: 400,
+      duration: 0.7,
+      opacity: 0,
+      stagger: 0.04,
+      ease: "expo.inOut"
+    });
+    
+    // Logo stays visible (2 seconds)
+    tl.to({}, { duration: 2 });
+    
+    // Logo fades out
+    tl.to(".logo_wrap", {
+      opacity: 0,
+      duration: 0.8,
+      ease: "power2.inOut",
+      onComplete: () => {
+        logoWrap.style.display = "none";
+        ScrollTrigger.refresh();
+      }
+    });
+  }
+  
   // ScrollTrigger animations
   gsap.registerPlugin(ScrollTrigger);
   const scrollItems = document.querySelectorAll('.home_flex_item');
