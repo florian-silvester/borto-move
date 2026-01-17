@@ -2644,7 +2644,7 @@ function initHomePageScripts() {
     return;
   }
   
-  const homeItems = document.querySelectorAll('.home_item');
+  // Note: homeItems already declared at top of initHomePageScripts()
   let isHomeGridView = false;
   
   function resetHomeTransformations() {
