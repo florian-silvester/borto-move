@@ -2517,32 +2517,12 @@ function initHomePageScripts() {
   function nextSlide() {
     if (homeItems.length <= 1) return;
     
-    const currentItem = homeItems[currentSlideIndex];
-    const nextIndex = (currentSlideIndex + 1) % homeItems.length;
-    const nextItem = homeItems[nextIndex];
+    const prevIndex = currentSlideIndex;
+    currentSlideIndex = (currentSlideIndex + 1) % homeItems.length;
     
-    // Make sure the .home_img inside next container is visible
-    const nextImg = nextItem.querySelector('.home_img');
-    if (nextImg) {
-      gsap.set(nextImg, { opacity: 1 });
-    }
-    
-    // Put next item on top, start invisible
-    gsap.set(nextItem, { zIndex: 2, opacity: 0 });
-    gsap.set(currentItem, { zIndex: 1 });
-    
-    // Fade in next item ON TOP of current (current stays visible underneath)
-    gsap.to(nextItem, {
-      opacity: 1,
-      duration: FADE_DURATION,
-      ease: "power2.inOut",
-      onComplete: () => {
-        // After fade complete, hide current
-        gsap.set(currentItem, { opacity: 0 });
-      }
-    });
-    
-    currentSlideIndex = nextIndex;
+    // Simple crossfade: fade out old, fade in new
+    gsap.to(homeItems[prevIndex], { opacity: 0, duration: FADE_DURATION, ease: "power2.inOut" });
+    gsap.to(homeItems[currentSlideIndex], { opacity: 1, duration: FADE_DURATION, ease: "power2.inOut" });
   }
   
   // Clean up slideshow on page leave (for Barba.js)
@@ -2619,13 +2599,14 @@ function initHomePageScripts() {
         ScrollTrigger.refresh();
         // Start slideshow after logo completes (if multiple images)
         if (homeItems.length > 1) {
-          // Make ALL .home_img visible (so crossfade works)
-          homeItems.forEach((item) => {
+          // Setup: current visible, others hidden, all images visible
+          homeItems.forEach((item, index) => {
             const img = item.querySelector('.home_img');
             if (img) gsap.set(img, { opacity: 1 });
+            gsap.set(item, { opacity: index === currentSlideIndex ? 1 : 0 });
           });
           slideshowInterval = setInterval(nextSlide, SLIDESHOW_DURATION);
-          console.log('✅ Slideshow started after logo animation');
+          console.log('✅ Slideshow started');
         }
       }
     }, "-=0.6"); // Start while image is still fading in (overlap)
