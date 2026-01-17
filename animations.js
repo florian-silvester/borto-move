@@ -2472,34 +2472,36 @@ function initHomePageScripts() {
   const SLIDESHOW_DURATION = 6000; // 6 seconds per image
   const FADE_DURATION = 1.2; // 1.2 second crossfade
   
-  // Show .home_img inside each item (CSS hides it by default with opacity: 0)
-  if (homeItems.length > 0) {
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FEATURED IMAGE SLIDESHOW - Completely independent of logo animation
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  function initFeaturedSlideshow() {
+    if (homeItems.length === 0) return;
+    
+    // Show .home_img inside each item (CSS hides it by default with opacity: 0)
     homeItems.forEach((item) => {
       const homeImg = item.querySelector('.home_img');
       if (homeImg) {
         gsap.set(homeImg, { opacity: 1 });
       }
     });
-    console.log('✅ Home images set to visible');
-  }
-  
-  function initFeaturedSlideshow() {
-    if (homeItems.length <= 1) {
-      console.log('Only one home_item found, no slideshow needed');
-      // Still show the single image
-      if (homeItems.length === 1) {
-        gsap.set(homeItems[0], { opacity: 1 });
-      }
+    
+    if (homeItems.length === 1) {
+      // Single image - just show it
+      gsap.set(homeItems[0], { opacity: 1 });
+      console.log('✅ Single home image shown');
       return;
     }
     
+    // Multiple images - setup slideshow
     console.log(`Found ${homeItems.length} home_items, initializing slideshow...`);
     
     // Pick random starting index
     currentSlideIndex = Math.floor(Math.random() * homeItems.length);
     console.log(`Starting slideshow at random index: ${currentSlideIndex}`);
     
-    // Set all items to opacity 0 initially, except the random starting one
+    // Set all items: show random one, hide others
     homeItems.forEach((item, index) => {
       gsap.set(item, { 
         opacity: index === currentSlideIndex ? 1 : 0,
@@ -2509,6 +2511,7 @@ function initHomePageScripts() {
     
     // Start the slideshow cycle
     slideshowInterval = setInterval(nextSlide, SLIDESHOW_DURATION);
+    console.log('✅ Home featured slideshow started');
   }
   
   function nextSlide() {
@@ -2517,9 +2520,6 @@ function initHomePageScripts() {
     const currentItem = homeItems[currentSlideIndex];
     const nextIndex = (currentSlideIndex + 1) % homeItems.length;
     const nextItem = homeItems[nextIndex];
-    
-    // Bring next slide to front but keep it invisible
-    gsap.set(nextItem, { zIndex: 3, opacity: 0 });
     
     // Crossfade: fade in next, fade out current
     gsap.to(nextItem, {
@@ -2531,12 +2531,7 @@ function initHomePageScripts() {
     gsap.to(currentItem, {
       opacity: 0,
       duration: FADE_DURATION,
-      ease: "power2.inOut",
-      onComplete: () => {
-        // Reset z-index after transition
-        gsap.set(currentItem, { zIndex: 1 });
-        gsap.set(nextItem, { zIndex: 2 });
-      }
+      ease: "power2.inOut"
     });
     
     currentSlideIndex = nextIndex;
@@ -2550,81 +2545,8 @@ function initHomePageScripts() {
     }
   };
   
-  // ═══════════════════════════════════════════════════════════════════════════
-  // LOGO ANIMATION + INITIAL IMAGE REVEAL
-  // ═══════════════════════════════════════════════════════════════════════════
-  
-  // Logo animation plays FIRST (no delay)
-  if (logoWrap) {
-    // Reset logo for animation
-    logoWrap.style.display = "block";
-    gsap.set(".logo_wrap", { opacity: 1 });
-    
-    // Hide all home_items initially for the reveal
-    homeItems.forEach(item => {
-      gsap.set(item, { opacity: 0 });
-    });
-    
-    const tl = gsap.timeline(); // No delay - starts immediately
-    
-    // Logo letters animate in
-    tl.from(".svg-letter", {
-      y: 400,
-      duration: 0.7,
-      opacity: 0,
-      stagger: 0.04,
-      ease: "expo.inOut"
-    });
-    
-    // Logo stays visible longer (2 seconds)
-    tl.to({}, { duration: 2 });
-    
-    // First image fades in BEFORE logo starts fading out
-    if (homeItems.length > 0) {
-      // Pick random starting image
-      currentSlideIndex = Math.floor(Math.random() * homeItems.length);
-      const firstItem = homeItems[currentSlideIndex];
-      
-      // Set z-index for proper layering
-      homeItems.forEach((item, index) => {
-        gsap.set(item, { zIndex: index === currentSlideIndex ? 2 : 1 });
-      });
-      
-      tl.fromTo(firstItem, 
-        { 
-          opacity: 0, 
-          scale: 1.02 
-        },
-        { 
-          opacity: 1, 
-          scale: 1,
-          duration: 1.2,
-          ease: "power2.out"
-        },
-        "-=0.8" // Start 0.8s before the pause ends (image fades in while logo still visible)
-      );
-    }
-    
-    // Logo fades out AFTER image has started fading in
-    tl.to(".logo_wrap", {
-      opacity: 0,
-      duration: 0.8,
-      ease: "power2.inOut",
-      onComplete: () => {
-        logoWrap.style.display = "none";
-        ScrollTrigger.refresh();
-        
-        // Start slideshow AFTER logo animation completes
-        if (homeItems.length > 1) {
-          slideshowInterval = setInterval(nextSlide, SLIDESHOW_DURATION);
-          console.log('✅ Home featured slideshow started');
-        }
-      }
-    }, "-=0.6"); // Start while image is still fading in (overlap)
-  } else {
-    // No logo animation - just start slideshow directly
-    initFeaturedSlideshow();
-  }
+  // START SLIDESHOW IMMEDIATELY (independent of logo)
+  initFeaturedSlideshow();
   
   // ScrollTrigger animations
   gsap.registerPlugin(ScrollTrigger);
