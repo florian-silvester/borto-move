@@ -2527,17 +2527,19 @@ function initHomePageScripts() {
       gsap.set(nextImg, { opacity: 1 });
     }
     
-    // Crossfade: fade in next, fade out current
+    // Put next item on top, start invisible
+    gsap.set(nextItem, { zIndex: 2, opacity: 0 });
+    gsap.set(currentItem, { zIndex: 1 });
+    
+    // Fade in next item ON TOP of current (current stays visible underneath)
     gsap.to(nextItem, {
       opacity: 1,
       duration: FADE_DURATION,
-      ease: "power2.inOut"
-    });
-    
-    gsap.to(currentItem, {
-      opacity: 0,
-      duration: FADE_DURATION,
-      ease: "power2.inOut"
+      ease: "power2.inOut",
+      onComplete: () => {
+        // After fade complete, hide current
+        gsap.set(currentItem, { opacity: 0 });
+      }
     });
     
     currentSlideIndex = nextIndex;
@@ -2617,6 +2619,11 @@ function initHomePageScripts() {
         ScrollTrigger.refresh();
         // Start slideshow after logo completes (if multiple images)
         if (homeItems.length > 1) {
+          // Make ALL .home_img visible (so crossfade works)
+          homeItems.forEach((item) => {
+            const img = item.querySelector('.home_img');
+            if (img) gsap.set(img, { opacity: 1 });
+          });
           slideshowInterval = setInterval(nextSlide, SLIDESHOW_DURATION);
           console.log('✅ Slideshow started after logo animation');
         }
