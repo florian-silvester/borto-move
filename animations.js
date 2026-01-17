@@ -2546,20 +2546,18 @@ function initHomePageScripts() {
   };
   
   // ═══════════════════════════════════════════════════════════════════════════
-  // LOGO ANIMATION FIRST, THEN SLIDESHOW
+  // ORIGINAL LOGO ANIMATION (restored from git ebb76c7)
   // ═══════════════════════════════════════════════════════════════════════════
   
+  const homeImg = document.querySelector(".home_img");
+  
+  // Logo animation plays FIRST (no delay)
   if (logoWrap) {
-    // Hide all images during logo animation
-    homeItems.forEach(item => {
-      gsap.set(item, { opacity: 0 });
-    });
-    
     // Reset logo for animation
     logoWrap.style.display = "block";
     gsap.set(".logo_wrap", { opacity: 1 });
     
-    const tl = gsap.timeline();
+    const tl = gsap.timeline(); // No delay - starts immediately
     
     // Logo letters animate in
     tl.from(".svg-letter", {
@@ -2570,10 +2568,27 @@ function initHomePageScripts() {
       ease: "expo.inOut"
     });
     
-    // Logo stays visible (2 seconds)
+    // Logo stays visible longer (2 seconds)
     tl.to({}, { duration: 2 });
     
-    // Logo fades out
+    // Image fades in BEFORE logo starts fading out
+    if (homeImg) {
+      tl.fromTo(".home_img", 
+        { 
+          opacity: 0, 
+          scale: 1.02 
+        },
+        { 
+          opacity: 1, 
+          scale: 1,
+          duration: 1.2,
+          ease: "power2.out"
+        },
+        "-=0.8" // Start 0.8s before the pause ends (image fades in while logo still visible)
+      );
+    }
+    
+    // Logo fades out AFTER image has started fading in
     tl.to(".logo_wrap", {
       opacity: 0,
       duration: 0.8,
@@ -2581,12 +2596,15 @@ function initHomePageScripts() {
       onComplete: () => {
         logoWrap.style.display = "none";
         ScrollTrigger.refresh();
-        // NOW start the slideshow after logo is done
-        initFeaturedSlideshow();
+        // Start slideshow after logo completes (if multiple images)
+        if (homeItems.length > 1) {
+          slideshowInterval = setInterval(nextSlide, SLIDESHOW_DURATION);
+          console.log('✅ Slideshow started after logo animation');
+        }
       }
-    });
+    }, "-=0.6"); // Start while image is still fading in (overlap)
   } else {
-    // No logo - start slideshow immediately
+    // No logo - just start slideshow immediately
     initFeaturedSlideshow();
   }
   
