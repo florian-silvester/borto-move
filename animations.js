@@ -2521,6 +2521,12 @@ function initHomePageScripts() {
     const nextIndex = (currentSlideIndex + 1) % homeItems.length;
     const nextItem = homeItems[nextIndex];
     
+    // Make sure the .home_img inside next container is visible
+    const nextImg = nextItem.querySelector('.home_img');
+    if (nextImg) {
+      gsap.set(nextImg, { opacity: 1 });
+    }
+    
     // Crossfade: fade in next, fade out current
     gsap.to(nextItem, {
       opacity: 1,
