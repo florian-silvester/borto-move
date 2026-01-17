@@ -2551,6 +2551,16 @@ function initHomePageScripts() {
   
   const homeImg = document.querySelector(".home_img");
   
+  // Pick random starting image index
+  currentSlideIndex = homeItems.length > 1 ? Math.floor(Math.random() * homeItems.length) : 0;
+  
+  // Hide all images except the random starting one BEFORE logo animation
+  if (homeItems.length > 1) {
+    homeItems.forEach((item, index) => {
+      gsap.set(item, { opacity: index === currentSlideIndex ? 1 : 0 });
+    });
+  }
+  
   // Logo animation plays FIRST (no delay)
   if (logoWrap) {
     // Reset logo for animation
@@ -2571,9 +2581,12 @@ function initHomePageScripts() {
     // Logo stays visible longer (2 seconds)
     tl.to({}, { duration: 2 });
     
-    // Image fades in BEFORE logo starts fading out
-    if (homeImg) {
-      tl.fromTo(".home_img", 
+    // Image fades in BEFORE logo starts fading out (only the selected one)
+    const selectedItem = homeItems[currentSlideIndex];
+    const selectedImg = selectedItem ? selectedItem.querySelector('.home_img') : homeImg;
+    
+    if (selectedImg) {
+      tl.fromTo(selectedImg, 
         { 
           opacity: 0, 
           scale: 1.02 
