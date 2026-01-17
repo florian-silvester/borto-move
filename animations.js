@@ -2472,9 +2472,32 @@ function initHomePageScripts() {
   const SLIDESHOW_DURATION = 6000; // 6 seconds per image
   const FADE_DURATION = 1.2; // 1.2 second crossfade
   
+  // First, ensure items are positioned for stacking and images are visible
+  if (homeItems.length > 0) {
+    // Set CSS for stacking (position absolute)
+    homeItems.forEach((item, index) => {
+      item.style.position = 'absolute';
+      item.style.top = '0';
+      item.style.left = '0';
+      item.style.width = '100%';
+      item.style.height = '100%';
+      
+      // Also ensure the .home_img inside is visible (CSS hides it by default)
+      const homeImg = item.querySelector('.home_img');
+      if (homeImg) {
+        gsap.set(homeImg, { opacity: 1 });
+      }
+    });
+    console.log('✅ Home items positioned for slideshow stacking');
+  }
+  
   function initFeaturedSlideshow() {
     if (homeItems.length <= 1) {
       console.log('Only one home_item found, no slideshow needed');
+      // Still show the single image
+      if (homeItems.length === 1) {
+        gsap.set(homeItems[0], { opacity: 1 });
+      }
       return;
     }
     
