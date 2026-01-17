@@ -2545,14 +2545,16 @@ function initHomePageScripts() {
     }
   };
   
-  // START SLIDESHOW IMMEDIATELY (independent of logo)
-  initFeaturedSlideshow();
-  
   // ═══════════════════════════════════════════════════════════════════════════
-  // LOGO ANIMATION (completely separate from slideshow)
+  // LOGO ANIMATION FIRST, THEN SLIDESHOW
   // ═══════════════════════════════════════════════════════════════════════════
   
   if (logoWrap) {
+    // Hide all images during logo animation
+    homeItems.forEach(item => {
+      gsap.set(item, { opacity: 0 });
+    });
+    
     // Reset logo for animation
     logoWrap.style.display = "block";
     gsap.set(".logo_wrap", { opacity: 1 });
@@ -2579,8 +2581,13 @@ function initHomePageScripts() {
       onComplete: () => {
         logoWrap.style.display = "none";
         ScrollTrigger.refresh();
+        // NOW start the slideshow after logo is done
+        initFeaturedSlideshow();
       }
     });
+  } else {
+    // No logo - start slideshow immediately
+    initFeaturedSlideshow();
   }
   
   // ScrollTrigger animations
