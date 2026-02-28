@@ -992,6 +992,7 @@ function initArtistWorksScrollAnimation() {
 function initArtistWorksParallaxOverlapAnimation() {
   const items = Array.from(document.querySelectorAll('.artist_works_layout .artist_works_item'));
   if (!items.length || typeof ScrollTrigger === 'undefined') return;
+  const cvWrap = document.querySelector('.cv_wrap');
 
   // Ensure legacy alignment classes do not affect full-bleed mode.
   items.forEach((item) => {
@@ -1017,7 +1018,8 @@ function initArtistWorksParallaxOverlapAnimation() {
         id: `artist-works-parallax-overlap-${index}`,
         trigger: item,
         start: () => item.offsetHeight > window.innerHeight ? 'bottom bottom' : 'top top',
-        end: 'bottom top',
+        endTrigger: cvWrap || item,
+        end: cvWrap ? 'top bottom' : 'bottom top',
         scrub: true,
         invalidateOnRefresh: true
       }
