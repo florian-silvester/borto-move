@@ -1008,61 +1008,21 @@ function initArtistWorksParallaxOverlapAnimation() {
   });
 
   items.forEach((item, index) => {
-    const image = item.querySelector('.artist_works_img');
-    gsap.set(item, { zIndex: index + 1 });
+    // Follow the provided pattern: each item controls its own target fade/shift.
+    const target = item.querySelector('.artist_works_img_wrap') || item.querySelector('.artist_works_img');
+    if (!target) return;
 
-    // Scroll-driven overlap: current item glides up over previous one.
-    gsap.fromTo(
-      item,
-      { y: '10svh' },
-      {
-        y: '0svh',
-        ease: 'none',
-        scrollTrigger: {
-          id: `artist-works-parallax-overlap-${index}`,
-          trigger: item,
-          start: 'top bottom',
-          end: 'top 55%',
-          scrub: true,
-          invalidateOnRefresh: true
-        }
+    const timeline = gsap.timeline({
+      scrollTrigger: {
+        id: `artist-works-parallax-overlap-${index}`,
+        trigger: item,
+        start: () => item.offsetHeight > window.innerHeight ? 'bottom bottom' : 'top top',
+        end: 'bottom top',
+        scrub: true,
+        invalidateOnRefresh: true
       }
-    );
-
-    if (image) {
-      gsap.fromTo(
-        image,
-        { yPercent: 8 },
-        {
-          yPercent: -8,
-          ease: 'none',
-          scrollTrigger: {
-            id: `artist-works-parallax-img-${index}`,
-            trigger: item,
-            start: 'top bottom',
-            end: 'bottom top',
-            scrub: 0.8,
-            invalidateOnRefresh: true
-          }
-        }
-      );
-    }
-
-    if (index > 0) {
-      const previousItem = items[index - 1];
-      gsap.to(previousItem, {
-        opacity: 0.45,
-        ease: 'none',
-        scrollTrigger: {
-          id: `artist-works-parallax-fade-${index - 1}`,
-          trigger: item,
-          start: 'top 82%',
-          end: 'top 35%',
-          scrub: true,
-          invalidateOnRefresh: true
-        }
-      });
-    }
+    });
+    timeline.to(target, { y: '30vh', opacity: 0, ease: 'none' });
   });
 
   ScrollTrigger.refresh();
@@ -2984,7 +2944,6 @@ function injectPageSpecificCSS(pathname) {
           position: relative;
           display: block;
           opacity: 1;
-          z-index: 1;
         }
         .artist_works_layout .artist_works_item .artist_works_img_wrap {
           width: 100% !important;
