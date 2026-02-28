@@ -1022,7 +1022,7 @@ function initArtistWorksParallaxOverlapAnimation() {
         invalidateOnRefresh: true
       }
     });
-    timeline.to(target, { y: '30vh', opacity: 0, ease: 'none' });
+    timeline.to(target, { y: '55vh', ease: 'none' });
   });
 
   ScrollTrigger.refresh();
