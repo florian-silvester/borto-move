@@ -992,7 +992,6 @@ function initArtistWorksScrollAnimation() {
 function initArtistWorksParallaxOverlapAnimation() {
   const items = Array.from(document.querySelectorAll('.artist_works_layout .artist_works_item'));
   if (!items.length || typeof ScrollTrigger === 'undefined') return;
-  const cvWrap = document.querySelector('.cv_wrap');
 
   // Ensure legacy alignment classes do not affect full-bleed mode.
   items.forEach((item) => {
@@ -1009,17 +1008,21 @@ function initArtistWorksParallaxOverlapAnimation() {
   });
 
   items.forEach((item, index) => {
+    // Keep the final item stable to avoid end-of-list glitches.
+    if (index === items.length - 1) return;
+
     // Follow the provided pattern: each item controls its own target fade/shift.
     const target = item.querySelector('.artist_works_img_wrap') || item.querySelector('.artist_works_img');
     if (!target) return;
+    const nextItem = items[index + 1];
 
     const timeline = gsap.timeline({
       scrollTrigger: {
         id: `artist-works-parallax-overlap-${index}`,
         trigger: item,
         start: () => item.offsetHeight > window.innerHeight ? 'bottom bottom' : 'top top',
-        endTrigger: cvWrap || item,
-        end: cvWrap ? 'top bottom' : 'bottom top',
+        endTrigger: nextItem,
+        end: 'top top',
         scrub: true,
         invalidateOnRefresh: true
       }
