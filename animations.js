@@ -71,6 +71,11 @@
   }
 })();
 
+// Artist works mode switch for quick demos/reverts.
+// 'parallax-overlap' = new stacked full-bleed behavior
+// 'legacy' = previous mixed-size + random alignment + fade-up reveal behavior
+const ARTIST_WORKS_EXPERIMENT_MODE = 'parallax-overlap';
+
 /* ═══════════════════════════════════════════════════════════════════════════
    1. GLOBAL CSS INJECTION (IIFE)
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -976,6 +981,93 @@ function initArtistWorksScrollAnimation() {
   }
 }
 
+/* ───────────────────────────────────────────────────────────────────────────
+   initArtistWorksParallaxOverlapAnimation() - Full-bleed overlap/parallax mode
+   ───────────────────────────────────────────────────────────────────────────
+   New optional artist page mode:
+   - all .artist_works_img use full width + 100svh (CSS in injectPageSpecificCSS)
+   - subtle image parallax while scrolling
+   - previous item fades as next item enters
+   ─────────────────────────────────────────────────────────────────────────── */
+function initArtistWorksParallaxOverlapAnimation() {
+  const items = Array.from(document.querySelectorAll('.artist_works_layout .artist_works_item'));
+  if (!items.length || typeof ScrollTrigger === 'undefined') return;
+
+  // Ensure legacy alignment classes do not affect full-bleed mode.
+  items.forEach((item) => {
+    item.classList.remove('align-left', 'align-center', 'align-right');
+    gsap.set(item, { opacity: 1 });
+  });
+
+  // Clean up prior experimental triggers when Barba re-inits this page.
+  ScrollTrigger.getAll().forEach((trigger) => {
+    const id = trigger.vars && trigger.vars.id;
+    if (typeof id === 'string' && id.startsWith('artist-works-parallax-')) {
+      trigger.kill();
+    }
+  });
+
+  items.forEach((item, index) => {
+    const image = item.querySelector('.artist_works_img');
+    gsap.set(item, { zIndex: index + 1 });
+
+    // Scroll-driven overlap: current item glides up over previous one.
+    gsap.fromTo(
+      item,
+      { y: '10svh' },
+      {
+        y: '0svh',
+        ease: 'none',
+        scrollTrigger: {
+          id: `artist-works-parallax-overlap-${index}`,
+          trigger: item,
+          start: 'top bottom',
+          end: 'top 55%',
+          scrub: true,
+          invalidateOnRefresh: true
+        }
+      }
+    );
+
+    if (image) {
+      gsap.fromTo(
+        image,
+        { yPercent: 8 },
+        {
+          yPercent: -8,
+          ease: 'none',
+          scrollTrigger: {
+            id: `artist-works-parallax-img-${index}`,
+            trigger: item,
+            start: 'top bottom',
+            end: 'bottom top',
+            scrub: 0.8,
+            invalidateOnRefresh: true
+          }
+        }
+      );
+    }
+
+    if (index > 0) {
+      const previousItem = items[index - 1];
+      gsap.to(previousItem, {
+        opacity: 0.45,
+        ease: 'none',
+        scrollTrigger: {
+          id: `artist-works-parallax-fade-${index - 1}`,
+          trigger: item,
+          start: 'top 82%',
+          end: 'top 35%',
+          scrub: true,
+          invalidateOnRefresh: true
+        }
+      });
+    }
+  });
+
+  ScrollTrigger.refresh();
+}
+
 
 /* Headroom Navigation - Global (home, exhibitions, and others) */
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -1141,8 +1233,16 @@ function initPageScripts() {
     initSwiper();
     initCVReadMore();
     initSortExhibitionsByYear();
-    initRandomizeArtistWorksAlignment();
-    initArtistWorksScrollAnimation();
+    
+    // Legacy artist works behavior kept for fast rollback/demo:
+    // initRandomizeArtistWorksAlignment();
+    // initArtistWorksScrollAnimation();
+    if (ARTIST_WORKS_EXPERIMENT_MODE === 'parallax-overlap') {
+      initArtistWorksParallaxOverlapAnimation();
+    } else {
+      initRandomizeArtistWorksAlignment();
+      initArtistWorksScrollAnimation();
+    }
   }
   
   if (isExhibitionDetail) {
@@ -2835,6 +2935,71 @@ function initHomePageScripts() {
 
 function injectPageSpecificCSS(pathname) {
   let namespace = 'default';
+  const exhibitionStickyTitleHoverColorFix = `
+        /* Keep sticky exhibition title legible on row hover */
+        .g_exhibition_item.u-grid-custom:hover .exhibition_title_sticky,
+        .g_exhibition_item.u-grid-custom:hover .exhibition_title_sticky .g_title {
+          color: var(--theme--text);
+        }
+  `;
+  const artistWorksLegacyCss = `
+        /* Legacy artist works image sizing (step-by-step, no masonry) */
+        .artist_works_layout .artist_works_item:first-child .artist_works_img_wrap {
+          width: 100%;
+        }
+        .artist_works_layout .artist_works_item:not(:first-child) .artist_works_img_wrap {
+          max-width: 100% !important;
+          width: fit-content !important; /* Safari: let wrapper shrink to image */
+          max-height: 85vh !important;
+        }
+        /* Shrink images to fit inside wrapper */
+        .artist_works_layout .artist_works_item:first-child .artist_works_img {
+          max-width: 100% !important;
+          height: auto !important;
+          width: 100% !important;
+          display: block;
+          object-fit: contain;
+        }
+        .artist_works_layout .artist_works_item:not(:first-child) .artist_works_img {
+          max-width: 100% !important;
+          max-height: 85vh !important;
+          height: auto !important;
+          width: auto !important;
+          display: block !important;
+          object-fit: contain !important;
+        }
+        /* Legacy alignment mode (class-driven, randomized via JS) */
+        .artist_works_layout .artist_works_item {
+          display: flex;
+          flex-direction: column;
+          opacity: 0;
+        }
+        .artist_works_layout .artist_works_item.align-left { align-items: flex-start; }
+        .artist_works_layout .artist_works_item.align-center { align-items: center; }
+        .artist_works_layout .artist_works_item.align-right { align-items: flex-end; }
+  `;
+  const artistWorksParallaxOverlapCss = `
+        /* Experimental mode: full-bleed images with scroll-driven overlap */
+        .artist_works_layout .artist_works_item {
+          position: relative;
+          display: block;
+          opacity: 1;
+          z-index: 1;
+        }
+        .artist_works_layout .artist_works_item .artist_works_img_wrap {
+          width: 100% !important;
+          max-width: none !important;
+          height: 100svh !important;
+          max-height: none !important;
+          overflow: hidden;
+        }
+        .artist_works_layout .artist_works_item .artist_works_img {
+          width: 100% !important;
+          height: 100% !important;
+          object-fit: cover !important;
+          display: block;
+        }
+  `;
   
   if (pathname === '/' || pathname === '') {
     namespace = 'home';
@@ -2902,6 +3067,7 @@ function injectPageSpecificCSS(pathname) {
             visibility: visible !important;
           }
         }
+${exhibitionStickyTitleHoverColorFix}
       `;
       break;
       
@@ -2929,40 +3095,11 @@ function injectPageSpecificCSS(pathname) {
           }
         }
 
-        /* Artist works image sizing (step-by-step, no masonry) */
-        .artist_works_layout .artist_works_item:first-child .artist_works_img_wrap {
-          width: 100%;
-        }
-        .artist_works_layout .artist_works_item:not(:first-child) .artist_works_img_wrap {
-          max-width: 100% !important;
-          width: fit-content !important; /* Safari: let wrapper shrink to image */
-          max-height: 85vh !important;
-        }
-        /* Shrink images to fit inside wrapper */
-        .artist_works_layout .artist_works_item:first-child .artist_works_img {
-          max-width: 100% !important;
-          height: auto !important;
-          width: 100% !important;
-          display: block;
-          object-fit: contain;
-        }
-        .artist_works_layout .artist_works_item:not(:first-child) .artist_works_img {
-          max-width: 100% !important;
-          max-height: 85vh !important;
-          height: auto !important;
-          width: auto !important;
-          display: block !important;
-          object-fit: contain !important;
-        }
-        /* Artist works alignment (class-driven, randomized via JS) */
-        .artist_works_layout .artist_works_item {
-          display: flex;
-          flex-direction: column;
-          opacity: 0;
-        }
-        .artist_works_layout .artist_works_item.align-left { align-items: flex-start; }
-        .artist_works_layout .artist_works_item.align-center { align-items: center; }
-        .artist_works_layout .artist_works_item.align-right { align-items: flex-end; }
+        /*
+          Legacy artist-works CSS is preserved in JS and can be re-enabled by
+          setting ARTIST_WORKS_EXPERIMENT_MODE = 'legacy'.
+        */
+${ARTIST_WORKS_EXPERIMENT_MODE === 'parallax-overlap' ? artistWorksParallaxOverlapCss : artistWorksLegacyCss}
         
         /* Show exhibition preview thumbnails on mobile/tablet (no hover) */
         @media (max-width: 1024px) {
@@ -2976,6 +3113,7 @@ function injectPageSpecificCSS(pathname) {
             visibility: visible !important;
           }
         }
+${exhibitionStickyTitleHoverColorFix}
       `;
       break;
       
@@ -3086,6 +3224,7 @@ function injectPageSpecificCSS(pathname) {
         .artist_name_outer .w-dyn-item:not(:last-child) .g_artist_divider { 
           display: inline; 
         }
+${exhibitionStickyTitleHoverColorFix}
       `;
       break;
       
