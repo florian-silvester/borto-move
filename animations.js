@@ -1852,7 +1852,7 @@ function initCaptionToggle() {
   captionWrappers.forEach((wrapper) => {
     wrapper.style.overflow = 'hidden';
     if (!wrapper.classList.contains('is-open')) {
-      gsap.set(wrapper, { height: '0%' });
+      gsap.set(wrapper, { maxHeight: '0px' });
     }
   });
 
@@ -1863,6 +1863,7 @@ function initCaptionToggle() {
   window.captionToggleHandler = function(e) {
     const trigger = e.target.closest('.caption_trigger');
     if (!trigger) return;
+    e.preventDefault();
 
     const scope =
       trigger.closest('.show_item') ||
@@ -1874,10 +1875,16 @@ function initCaptionToggle() {
 
     const isOpen = captionOuter.classList.contains('is-open');
     gsap.killTweensOf(captionOuter);
+    const captionContent = captionOuter.querySelector('.ap_caption_wrap') || captionOuter;
+    const fullHeight = `${captionContent.scrollHeight}px`;
 
     if (isOpen) {
+      // If expanded with unrestricted maxHeight, lock current height before collapsing.
+      if (captionOuter.style.maxHeight === 'none' || !captionOuter.style.maxHeight) {
+        gsap.set(captionOuter, { maxHeight: `${captionOuter.scrollHeight}px` });
+      }
       gsap.to(captionOuter, {
-        height: '0%',
+        maxHeight: '0px',
         duration: 0.65,
         ease: 'power2.inOut'
       });
@@ -1885,9 +1892,14 @@ function initCaptionToggle() {
       trigger.classList.remove('is-open');
     } else {
       gsap.to(captionOuter, {
-        height: '100%',
+        maxHeight: fullHeight,
         duration: 0.75,
-        ease: 'power2.inOut'
+        ease: 'power2.inOut',
+        onComplete: () => {
+          if (captionOuter.classList.contains('is-open')) {
+            captionOuter.style.maxHeight = 'none';
+          }
+        }
       });
       captionOuter.classList.add('is-open');
       trigger.classList.add('is-open');
