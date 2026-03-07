@@ -80,6 +80,15 @@ function isArtistDetailPath(pathname) {
   return pathname.includes('/artists/') && !pathname.endsWith('/artists') && pathname !== '/artists/';
 }
 
+function isArtistDetailContainer(container) {
+  if (!container) return false;
+  return Boolean(
+    container.querySelector('.artist_works_layout') ||
+    container.querySelector('.show_controls_inner') ||
+    container.querySelector('#Caption')
+  );
+}
+
 function applyArtistControlsClosedState(root = document) {
   const controls = root.querySelector('.show_controls_inner');
   if (controls) {
@@ -3636,15 +3645,24 @@ barba.init({
       
       const container = data.next.container;
       const nextPath = (data.next && data.next.url && data.next.url.path) || '';
-      const isArtistNextPage = isArtistDetailPath(nextPath);
+      const isArtistNextPage =
+        isArtistDetailPath(nextPath) ||
+        isArtistDetailContainer(container) ||
+        isArtistDetailPath(window.location.pathname);
       const navWrap = document.querySelector('.nav_wrap');
       const pageMain = container.querySelector('.page_main');
       
+      console.log('Artist prehide detection:', {
+        nextPath,
+        fromPath: window.location.pathname,
+        isArtistByPath: isArtistDetailPath(nextPath),
+        isArtistByContainer: isArtistDetailContainer(container),
+        isArtistNextPage
+      });
+
       if (isArtistNextPage) {
         document.documentElement.classList.add('artist-prehide');
         applyArtistControlsClosedState(container);
-      } else {
-        document.documentElement.classList.remove('artist-prehide');
       }
       
       // Make container visible
