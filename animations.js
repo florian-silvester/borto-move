@@ -1846,13 +1846,45 @@ function initCVReadMore() {
    is clicked. Uses event delegation for Barba compatibility.
    ─────────────────────────────────────────────────────────────────────────── */
 function initCaptionToggle() {
-  const captionWrappers = document.querySelectorAll('.ap_caption_outer');
-  if (!captionWrappers.length) return;
+  function resolveCaptionNodes(trigger) {
+    const scope =
+      trigger.closest('.show_item') ||
+      trigger.closest('.work_modal') ||
+      trigger.parentElement ||
+      document;
 
-  captionWrappers.forEach((wrapper) => {
-    wrapper.style.overflow = 'hidden';
-    if (!wrapper.classList.contains('is-open')) {
-      gsap.set(wrapper, { maxHeight: '0px' });
+    const outer = scope.querySelector('.ap_caption_outer');
+    const wrap = scope.querySelector('.ap_caption_wrap');
+
+    // Preferred structure: .ap_caption_wrap inside .ap_caption_outer
+    if (outer) {
+      const nestedWrap = outer.querySelector('.ap_caption_wrap');
+      if (nestedWrap && nestedWrap.scrollHeight > 0) {
+        return { target: outer, content: nestedWrap };
+      }
+      if (outer.scrollHeight > 0) {
+        return { target: outer, content: outer };
+      }
+    }
+
+    // Fallback: some templates expose .ap_caption_wrap as sibling/content node
+    if (wrap) {
+      return { target: wrap, content: wrap };
+    }
+
+    return null;
+  }
+
+  const triggers = document.querySelectorAll('.caption_trigger');
+  if (!triggers.length) return;
+
+  triggers.forEach((trigger) => {
+    const nodes = resolveCaptionNodes(trigger);
+    if (!nodes) return;
+
+    nodes.target.style.overflow = 'hidden';
+    if (!nodes.target.classList.contains('is-open')) {
+      gsap.set(nodes.target, { maxHeight: '0px' });
     }
   });
 
@@ -1865,17 +1897,13 @@ function initCaptionToggle() {
     if (!trigger) return;
     e.preventDefault();
 
-    const scope =
-      trigger.closest('.show_item') ||
-      trigger.closest('.work_modal') ||
-      trigger.parentElement ||
-      document;
-    const captionOuter = scope.querySelector('.ap_caption_outer') || document.querySelector('.ap_caption_outer');
-    if (!captionOuter) return;
+    const nodes = resolveCaptionNodes(trigger);
+    if (!nodes) return;
+    const captionOuter = nodes.target;
+    const captionContent = nodes.content;
 
     const isOpen = captionOuter.classList.contains('is-open');
     gsap.killTweensOf(captionOuter);
-    const captionContent = captionOuter.querySelector('.ap_caption_wrap') || captionOuter;
     const fullHeight = `${captionContent.scrollHeight}px`;
 
     if (isOpen) {
