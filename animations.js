@@ -1209,6 +1209,12 @@ function initPageScripts() {
   const isHomeZig = pathname === '/home-zig' || pathname === '/home-zig/';
   const isHome = pathname === '/' || pathname === '';
 
+  // Barba can retain document listeners across transitions; always clear this one first.
+  if (window.artistCaptionToggleHandler) {
+    document.removeEventListener('click', window.artistCaptionToggleHandler);
+    window.artistCaptionToggleHandler = null;
+  }
+
   if (!isArtistPage) {
     document.body.classList.remove('artist-content-ready');
   }
@@ -1236,6 +1242,7 @@ function initPageScripts() {
 
     initSwiper();
     initCVReadMore();
+    initArtistCaptionToggle();
     initSortExhibitionsByYear();
     
     // Legacy artist works behavior kept for fast rollback/demo:
@@ -1378,6 +1385,108 @@ function revealArtistPageContent() {
     ease: 'power2.out',
     onComplete: () => document.body.classList.add('artist-content-ready')
   });
+}
+
+function initArtistCaptionToggle() {
+  if (window.artistCaptionToggleHandler) {
+    document.removeEventListener('click', window.artistCaptionToggleHandler);
+    window.artistCaptionToggleHandler = null;
+  }
+
+  const trigger = document.querySelector('#Caption');
+  const panel = document.querySelector('.ap_caption_wrap');
+  if (!trigger || !panel) return;
+
+  const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let isOpen = false;
+
+  const setClosedState = () => {
+    gsap.killTweensOf(panel);
+    panel.style.display = 'none';
+    panel.style.height = '0px';
+    panel.style.opacity = '0';
+    panel.style.overflow = 'hidden';
+    panel.style.pointerEvents = 'none';
+    trigger.classList.remove('is-active');
+    isOpen = false;
+  };
+
+  const openPanel = () => {
+    gsap.killTweensOf(panel);
+    panel.style.display = 'block';
+    panel.style.overflow = 'hidden';
+    panel.style.pointerEvents = 'none';
+
+    const targetHeight = panel.scrollHeight;
+    if (prefersReducedMotion) {
+      panel.style.height = 'auto';
+      panel.style.opacity = '1';
+      panel.style.overflow = 'visible';
+      panel.style.pointerEvents = 'auto';
+      trigger.classList.add('is-active');
+      isOpen = true;
+      return;
+    }
+
+    gsap.fromTo(panel,
+      { height: 0, opacity: 0 },
+      {
+        height: targetHeight,
+        opacity: 1,
+        duration: 0.45,
+        ease: 'power2.out',
+        onComplete: () => {
+          panel.style.height = 'auto';
+          panel.style.overflow = 'visible';
+          panel.style.pointerEvents = 'auto';
+        }
+      }
+    );
+    trigger.classList.add('is-active');
+    isOpen = true;
+  };
+
+  const closePanel = () => {
+    gsap.killTweensOf(panel);
+    panel.style.overflow = 'hidden';
+    panel.style.pointerEvents = 'none';
+
+    const currentHeight = panel.scrollHeight;
+    if (prefersReducedMotion) {
+      setClosedState();
+      return;
+    }
+
+    gsap.fromTo(panel,
+      { height: currentHeight, opacity: 1 },
+      {
+        height: 0,
+        opacity: 0,
+        duration: 0.35,
+        ease: 'power2.inOut',
+        onComplete: () => {
+          panel.style.display = 'none';
+        }
+      }
+    );
+    trigger.classList.remove('is-active');
+    isOpen = false;
+  };
+
+  setClosedState();
+
+  window.artistCaptionToggleHandler = function artistCaptionToggleHandler(e) {
+    const hit = e.target.closest('#Caption');
+    if (!hit) return;
+    e.preventDefault();
+    if (isOpen) {
+      closePanel();
+    } else {
+      openPanel();
+    }
+  };
+
+  document.addEventListener('click', window.artistCaptionToggleHandler);
 }
 
 // Placeholder functions (will be defined or already exist below)
