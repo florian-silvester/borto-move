@@ -76,62 +76,6 @@
 // 'legacy' = previous mixed-size + random alignment + fade-up reveal behavior
 const ARTIST_WORKS_EXPERIMENT_MODE = 'parallax-overlap';
 
-function isArtistDetailPath(pathname) {
-  return pathname.includes('/artists/') && !pathname.endsWith('/artists') && pathname !== '/artists/';
-}
-
-function isArtistDetailContainer(container) {
-  if (!container) return false;
-  return Boolean(
-    container.querySelector('.artist_works_layout') ||
-    container.querySelector('.show_controls_inner') ||
-    container.querySelector('#Caption')
-  );
-}
-
-function applyArtistControlsClosedState(root = document) {
-  const controls = root.querySelector('.show_controls_inner');
-  if (controls) {
-    controls.style.opacity = '0';
-    controls.style.visibility = 'hidden';
-    controls.style.pointerEvents = 'none';
-  }
-
-  const captionPanel = root.querySelector('.ap_caption_wrap');
-  if (captionPanel) {
-    captionPanel.style.display = 'none';
-    captionPanel.style.height = '0px';
-    captionPanel.style.opacity = '0';
-    captionPanel.style.overflow = 'hidden';
-    captionPanel.style.pointerEvents = 'none';
-  }
-}
-
-// Critical pre-hide: prevent first-paint flash on artist detail.
-(function setupArtistCriticalPrehide() {
-  const style = document.createElement('style');
-  style.setAttribute('data-artist-critical-prehide', 'true');
-  style.textContent = `
-    html.artist-prehide .show_controls_inner {
-      opacity: 0 !important;
-      visibility: hidden !important;
-      pointer-events: none !important;
-    }
-    html.artist-prehide .ap_caption_wrap {
-      display: none !important;
-      height: 0 !important;
-      opacity: 0 !important;
-      overflow: hidden !important;
-      pointer-events: none !important;
-    }
-  `;
-  document.head.appendChild(style);
-
-  if (isArtistDetailPath(window.location.pathname)) {
-    document.documentElement.classList.add('artist-prehide');
-  }
-})();
-
 /* ═══════════════════════════════════════════════════════════════════════════
    1. GLOBAL CSS INJECTION (IIFE)
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -1255,7 +1199,7 @@ function initPageScripts() {
   console.log('🔄 Initializing page scripts...');
   
   const pathname = window.location.pathname;
-  const isArtistPage = isArtistDetailPath(pathname);
+  const isArtistPage = pathname.includes('/artists/') && !pathname.endsWith('/artists');
   const isArtistsList = pathname === '/artists' || pathname === '/artists/';
   const isExhibitionDetail = pathname.includes('/exhibitions/') && !pathname.endsWith('/exhibitions');
   const isExhibitionsList = pathname === '/exhibitions' || pathname === '/exhibitions/';
@@ -1265,16 +1209,8 @@ function initPageScripts() {
   const isHomeZig = pathname === '/home-zig' || pathname === '/home-zig/';
   const isHome = pathname === '/' || pathname === '';
 
-  // Barba can retain document listeners across transitions; always clear this one first.
-  if (window.artistCaptionToggleHandler) {
-    document.removeEventListener('click', window.artistCaptionToggleHandler);
-    window.artistCaptionToggleHandler = null;
-  }
-
   if (!isArtistPage) {
     document.body.classList.remove('artist-content-ready');
-    document.body.classList.remove('artist-controls-ready');
-    document.documentElement.classList.remove('artist-prehide');
   }
   
   // Global scripts (run on all pages)
@@ -1286,6 +1222,7 @@ function initPageScripts() {
   initExhibitionSorting();
   initNewsHoverThumbnails(); // News items can appear on multiple pages
   initMeasurementDimensions(); // Normalize x/× separators in dimensions and captions
+  initCaptionToggle(); // Toggle .ap_caption_outer with .caption_trigger click
   
   // Page-specific scripts
   if (isArtistsList || isExhibitionsList || isArtistPage || isNewsPage || isOldHome || isHome || isHomeBottom) {
@@ -1295,15 +1232,11 @@ function initPageScripts() {
   
   if (isArtistPage) {
     // Artist detail should enter only after nav has finished.
-    document.documentElement.classList.add('artist-prehide');
-    applyArtistControlsClosedState();
     document.body.classList.remove('artist-content-ready');
-    document.body.classList.remove('artist-controls-ready');
-    revealArtistPageContent(() => revealArtistControls());
+    revealArtistPageContent();
 
     initSwiper();
     initCVReadMore();
-    initArtistCaptionToggle();
     initSortExhibitionsByYear();
     
     // Legacy artist works behavior kept for fast rollback/demo:
@@ -1426,12 +1359,9 @@ function initPageScripts() {
   console.log('✅ Page scripts initialized');
 }
 
-function revealArtistPageContent(onComplete) {
+function revealArtistPageContent() {
   const wrap = document.querySelector('.artist_works_layout');
-  if (!wrap) {
-    if (typeof onComplete === 'function') onComplete();
-    return;
-  }
+  if (!wrap) return;
 
   const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   gsap.killTweensOf(wrap);
@@ -1439,7 +1369,6 @@ function revealArtistPageContent(onComplete) {
   if (prefersReducedMotion) {
     gsap.set(wrap, { opacity: 1 });
     document.body.classList.add('artist-content-ready');
-    if (typeof onComplete === 'function') onComplete();
     return;
   }
 
@@ -1448,151 +1377,8 @@ function revealArtistPageContent(onComplete) {
     opacity: 1,
     duration: 0.55,
     ease: 'power2.out',
-    onComplete: () => {
-      document.body.classList.add('artist-content-ready');
-      if (typeof onComplete === 'function') onComplete();
-    }
+    onComplete: () => document.body.classList.add('artist-content-ready')
   });
-}
-
-function revealArtistControls() {
-  const controls = document.querySelector('.show_controls_inner');
-  if (!controls) return;
-
-  const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  gsap.killTweensOf(controls);
-  controls.style.visibility = 'visible';
-  controls.style.pointerEvents = 'auto';
-  document.body.classList.add('artist-controls-ready');
-  document.documentElement.classList.remove('artist-prehide');
-
-  if (prefersReducedMotion) {
-    gsap.set(controls, { opacity: 1 });
-    return;
-  }
-
-  gsap.fromTo(
-    controls,
-    { opacity: 0 },
-    {
-      opacity: 1,
-      duration: 0.35,
-      ease: 'power1.out'
-    }
-  );
-}
-
-function initArtistCaptionToggle() {
-  if (window.artistCaptionToggleHandler) {
-    document.removeEventListener('click', window.artistCaptionToggleHandler);
-    window.artistCaptionToggleHandler = null;
-  }
-
-  const trigger = document.querySelector('#Caption');
-  const panel = document.querySelector('.ap_caption_wrap');
-  if (!trigger || !panel) return;
-
-  const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let isOpen = false;
-
-  const setClosedState = () => {
-    gsap.killTweensOf(panel);
-    panel.style.display = 'none';
-    panel.style.height = '0px';
-    panel.style.opacity = '0';
-    panel.style.overflow = 'hidden';
-    panel.style.pointerEvents = 'none';
-    trigger.classList.remove('is-caption-open');
-    trigger.setAttribute('aria-expanded', 'false');
-    isOpen = false;
-  };
-
-  const openPanel = () => {
-    gsap.killTweensOf(panel);
-    panel.style.display = 'block';
-    panel.style.overflow = 'hidden';
-    panel.style.pointerEvents = 'none';
-
-    const targetHeight = panel.scrollHeight;
-    if (prefersReducedMotion) {
-      panel.style.height = 'auto';
-      panel.style.opacity = '1';
-      panel.style.overflow = 'visible';
-      panel.style.pointerEvents = 'auto';
-      trigger.classList.add('is-caption-open');
-      trigger.setAttribute('aria-expanded', 'true');
-      isOpen = true;
-      return;
-    }
-
-    gsap.fromTo(panel,
-      { height: 0, opacity: 0 },
-      {
-        height: targetHeight,
-        opacity: 1,
-        duration: 0.45,
-        ease: 'power2.out',
-        onComplete: () => {
-          panel.style.height = 'auto';
-          panel.style.overflow = 'visible';
-          panel.style.pointerEvents = 'auto';
-        }
-      }
-    );
-    trigger.classList.add('is-caption-open');
-    trigger.setAttribute('aria-expanded', 'true');
-    isOpen = true;
-  };
-
-  const closePanel = () => {
-    gsap.killTweensOf(panel);
-    panel.style.overflow = 'hidden';
-    panel.style.pointerEvents = 'none';
-
-    const currentHeight = panel.scrollHeight;
-    if (prefersReducedMotion) {
-      setClosedState();
-      return;
-    }
-
-    gsap.fromTo(panel,
-      { height: currentHeight, opacity: 1 },
-      {
-        height: 0,
-        opacity: 0,
-        duration: 0.35,
-        ease: 'power2.inOut',
-        onComplete: () => {
-          panel.style.display = 'none';
-        }
-      }
-    );
-    trigger.classList.remove('is-caption-open');
-    trigger.setAttribute('aria-expanded', 'false');
-    isOpen = false;
-  };
-
-  setClosedState();
-
-  window.artistCaptionToggleHandler = function artistCaptionToggleHandler(e) {
-    const hit = e.target.closest('#Caption');
-    if (hit) {
-      e.preventDefault();
-      if (isOpen) {
-        closePanel();
-      } else {
-        openPanel();
-      }
-      return;
-    }
-
-    // Close when clicking outside the artist controls container.
-    if (isOpen && !e.target.closest('.show_controls_inner')) {
-      closePanel();
-    }
-  };
-
-  document.addEventListener('click', window.artistCaptionToggleHandler);
 }
 
 // Placeholder functions (will be defined or already exist below)
@@ -2051,6 +1837,64 @@ function initCVReadMore() {
   };
   
   document.addEventListener('click', window.cvReadMoreHandler);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   initCaptionToggle() - Artwork Caption Expand/Collapse
+   ───────────────────────────────────────────────────────────────────────────
+   Toggles .ap_caption_outer with GSAP height animation when .caption_trigger
+   is clicked. Uses event delegation for Barba compatibility.
+   ─────────────────────────────────────────────────────────────────────────── */
+function initCaptionToggle() {
+  const captionWrappers = document.querySelectorAll('.ap_caption_outer');
+  if (!captionWrappers.length) return;
+
+  captionWrappers.forEach((wrapper) => {
+    wrapper.style.overflow = 'hidden';
+    if (!wrapper.classList.contains('is-open')) {
+      gsap.set(wrapper, { height: '0%' });
+    }
+  });
+
+  if (window.captionToggleHandler) {
+    document.removeEventListener('click', window.captionToggleHandler);
+  }
+
+  window.captionToggleHandler = function(e) {
+    const trigger = e.target.closest('.caption_trigger');
+    if (!trigger) return;
+
+    const scope =
+      trigger.closest('.show_item') ||
+      trigger.closest('.work_modal') ||
+      trigger.parentElement ||
+      document;
+    const captionOuter = scope.querySelector('.ap_caption_outer') || document.querySelector('.ap_caption_outer');
+    if (!captionOuter) return;
+
+    const isOpen = captionOuter.classList.contains('is-open');
+    gsap.killTweensOf(captionOuter);
+
+    if (isOpen) {
+      gsap.to(captionOuter, {
+        height: '0%',
+        duration: 0.65,
+        ease: 'power2.inOut'
+      });
+      captionOuter.classList.remove('is-open');
+      trigger.classList.remove('is-open');
+    } else {
+      gsap.to(captionOuter, {
+        height: '100%',
+        duration: 0.75,
+        ease: 'power2.inOut'
+      });
+      captionOuter.classList.add('is-open');
+      trigger.classList.add('is-open');
+    }
+  };
+
+  document.addEventListener('click', window.captionToggleHandler);
 }
 
 /* ───────────────────────────────────────────────────────────────────────────
@@ -3342,17 +3186,6 @@ ${exhibitionStickyTitleHoverColorFix}
           opacity: 1;
         }
 
-        /* Keep controls hidden until artist content intro has finished */
-        .show_controls_inner {
-          opacity: 0;
-          visibility: hidden;
-          pointer-events: none;
-        }
-        body.artist-controls-ready .show_controls_inner {
-          visibility: visible;
-          pointer-events: auto;
-        }
-
         /*
           Legacy artist-works CSS is preserved in JS and can be re-enabled by
           setting ARTIST_WORKS_EXPERIMENT_MODE = 'legacy'.
@@ -3556,7 +3389,7 @@ ${exhibitionStickyTitleHoverColorFix}
     if (!container) return;
     
     const pathname = window.location.pathname;
-    const isArtistInitialPage = isArtistDetailPath(pathname);
+    const isArtistInitialPage = pathname.includes('/artists/') && !pathname.endsWith('/artists') && pathname !== '/artists/';
     const namespace = injectPageSpecificCSS(pathname);
     
     container.setAttribute('data-barba-namespace', namespace);
@@ -3571,9 +3404,6 @@ ${exhibitionStickyTitleHoverColorFix}
     // Initialize scripts immediately on non-artist pages.
     if (!isArtistInitialPage) {
       initPageScripts();
-    } else {
-      // Hard-refresh artist pages: force controls/captions closed before nav intro.
-      applyArtistControlsClosedState();
     }
 
     // Also run nav intro animation on hard refresh (no Barba transition yet)
@@ -3644,26 +3474,8 @@ barba.init({
       window.scrollTo(0, 0);
       
       const container = data.next.container;
-      const nextPath = (data.next && data.next.url && data.next.url.path) || '';
-      const isArtistNextPage =
-        isArtistDetailPath(nextPath) ||
-        isArtistDetailContainer(container) ||
-        isArtistDetailPath(window.location.pathname);
       const navWrap = document.querySelector('.nav_wrap');
       const pageMain = container.querySelector('.page_main');
-      
-      console.log('Artist prehide detection:', {
-        nextPath,
-        fromPath: window.location.pathname,
-        isArtistByPath: isArtistDetailPath(nextPath),
-        isArtistByContainer: isArtistDetailContainer(container),
-        isArtistNextPage
-      });
-
-      if (isArtistNextPage) {
-        document.documentElement.classList.add('artist-prehide');
-        applyArtistControlsClosedState(container);
-      }
       
       // Make container visible
       container.style.visibility = 'visible';
