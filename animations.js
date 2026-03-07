@@ -992,41 +992,12 @@ function initArtistWorksScrollAnimation() {
 function initArtistWorksParallaxOverlapAnimation() {
   const items = Array.from(document.querySelectorAll('.artist_works_layout .artist_works_item'));
   if (!items.length || typeof ScrollTrigger === 'undefined') return;
-  const bodyEl = document.body;
-  const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  if (bodyEl) {
-    bodyEl.classList.remove('artist-works-intro-complete');
-  }
 
   // Ensure legacy alignment classes do not affect full-bleed mode.
   items.forEach((item) => {
     item.classList.remove('align-left', 'align-center', 'align-right');
     gsap.set(item, { opacity: 1 });
   });
-
-  // Integrate first fullscreen image with page-entry timing to avoid abrupt popping.
-  const firstTarget = items[0].querySelector('.artist_works_img_wrap') || items[0].querySelector('.artist_works_img');
-  if (firstTarget) {
-    gsap.killTweensOf(firstTarget);
-    gsap.set(firstTarget, { autoAlpha: 0 });
-    if (prefersReducedMotion) {
-      gsap.set(firstTarget, { autoAlpha: 1 });
-      if (bodyEl) bodyEl.classList.add('artist-works-intro-complete');
-    } else {
-      gsap.to(firstTarget, {
-        autoAlpha: 1,
-        duration: 0.9,
-        delay: 0.08,
-        ease: 'power2.out',
-        onComplete: () => {
-          if (bodyEl) bodyEl.classList.add('artist-works-intro-complete');
-        }
-      });
-    }
-  } else if (bodyEl) {
-    bodyEl.classList.add('artist-works-intro-complete');
-  }
 
   // Clean up prior experimental triggers when Barba re-inits this page.
   ScrollTrigger.getAll().forEach((trigger) => {
@@ -1205,6 +1176,10 @@ function initPageScripts() {
   const isHomeBottom = pathname === '/home-bottom' || pathname === '/home-bottom/';
   const isHomeZig = pathname === '/home-zig' || pathname === '/home-zig/';
   const isHome = pathname === '/' || pathname === '';
+
+  if (!isArtistPage) {
+    document.body.classList.remove('artist-content-ready');
+  }
   
   // Global scripts (run on all pages)
   initBackButton(); // Back navigation
@@ -1222,8 +1197,10 @@ function initPageScripts() {
   }
   
   if (isArtistPage) {
-    // Skip page_main fade-in to avoid conflict with scroll animations
-    
+    // Artist detail should enter only after nav has finished.
+    document.body.classList.remove('artist-content-ready');
+    revealArtistPageContent();
+
     initSwiper();
     initCVReadMore();
     initSortExhibitionsByYear();
@@ -1347,6 +1324,28 @@ function initPageScripts() {
   }
   
   console.log('✅ Page scripts initialized');
+}
+
+function revealArtistPageContent() {
+  const wrap = document.querySelector('.artist_works_layout');
+  if (!wrap) return;
+
+  const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  gsap.killTweensOf(wrap);
+
+  if (prefersReducedMotion) {
+    gsap.set(wrap, { opacity: 1 });
+    document.body.classList.add('artist-content-ready');
+    return;
+  }
+
+  gsap.set(wrap, { opacity: 0 });
+  gsap.to(wrap, {
+    opacity: 1,
+    duration: 0.55,
+    ease: 'power2.out',
+    onComplete: () => document.body.classList.add('artist-content-ready')
+  });
 }
 
 // Placeholder functions (will be defined or already exist below)
@@ -2986,12 +2985,6 @@ function injectPageSpecificCSS(pathname) {
           max-height: none !important;
           overflow: hidden;
         }
-        .artist_works_layout .artist_works_item:first-child .artist_works_img_wrap {
-          opacity: 0;
-        }
-        body.artist-works-intro-complete .artist_works_layout .artist_works_item:first-child .artist_works_img_wrap {
-          opacity: 1;
-        }
         .artist_works_layout .artist_works_item .artist_works_img {
           width: 100% !important;
           height: 100% !important;
@@ -3092,6 +3085,14 @@ ${exhibitionStickyTitleHoverColorFix}
           .nav-unpinned {
             transform: translateY(calc(-1 * var(--size--24rem)));
           }
+        }
+
+        /* Keep fullscreen works hidden until nav intro completes */
+        .artist_works_layout {
+          opacity: 0;
+        }
+        body.artist-content-ready .artist_works_layout {
+          opacity: 1;
         }
 
         /*
@@ -3297,6 +3298,7 @@ ${exhibitionStickyTitleHoverColorFix}
     if (!container) return;
     
     const pathname = window.location.pathname;
+    const isArtistInitialPage = pathname.includes('/artists/') && !pathname.endsWith('/artists') && pathname !== '/artists/';
     const namespace = injectPageSpecificCSS(pathname);
     
     container.setAttribute('data-barba-namespace', namespace);
@@ -3308,8 +3310,10 @@ ${exhibitionStickyTitleHoverColorFix}
     pageWrapElements.forEach(el => el.setAttribute("data-theme", storedTheme));
     document.body.setAttribute("data-theme", storedTheme);
     
-    // Initialize all page scripts
-    initPageScripts();
+    // Initialize scripts immediately on non-artist pages.
+    if (!isArtistInitialPage) {
+      initPageScripts();
+    }
 
     // Also run nav intro animation on hard refresh (no Barba transition yet)
     try {
@@ -3336,9 +3340,18 @@ ${exhibitionStickyTitleHoverColorFix}
         if (navBorder) tl.to(navBorder, { width: '100%', duration: 1.2, ease: 'power2.out' }, 0.15);
         
         tl.to({}, { duration: 0.5 }); // same pause for refresh
+        if (isArtistInitialPage) {
+          tl.call(() => initPageScripts());
+        }
+      } else if (isArtistInitialPage) {
+        // Artist page fallback when nav is missing.
+        initPageScripts();
       }
     } catch (e) {
       console.log('Initial nav intro error:', e);
+      if (isArtistInitialPage) {
+        initPageScripts();
+      }
     }
   });
 })();
