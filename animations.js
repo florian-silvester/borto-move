@@ -1884,7 +1884,7 @@ function initCaptionToggle() {
 
     nodes.target.style.overflow = 'hidden';
     if (!nodes.target.classList.contains('is-open')) {
-      gsap.set(nodes.target, { maxHeight: '0px' });
+      gsap.set(nodes.target, { height: '0px' });
     }
   });
 
@@ -1907,12 +1907,12 @@ function initCaptionToggle() {
     const fullHeight = `${captionContent.scrollHeight}px`;
 
     if (isOpen) {
-      // If expanded with unrestricted maxHeight, lock current height before collapsing.
-      if (captionOuter.style.maxHeight === 'none' || !captionOuter.style.maxHeight) {
-        gsap.set(captionOuter, { maxHeight: `${captionOuter.scrollHeight}px` });
+      // If expanded with auto height, lock current height before collapsing.
+      if (captionOuter.style.height === 'auto' || !captionOuter.style.height) {
+        gsap.set(captionOuter, { height: `${captionOuter.scrollHeight}px` });
       }
       gsap.to(captionOuter, {
-        maxHeight: '0px',
+        height: '0px',
         duration: 0.65,
         ease: 'power2.inOut'
       });
@@ -1920,12 +1920,12 @@ function initCaptionToggle() {
       trigger.classList.remove('is-open');
     } else {
       gsap.to(captionOuter, {
-        maxHeight: fullHeight,
+        height: fullHeight,
         duration: 0.75,
         ease: 'power2.inOut',
         onComplete: () => {
           if (captionOuter.classList.contains('is-open')) {
-            captionOuter.style.maxHeight = 'none';
+            captionOuter.style.height = 'auto';
           }
         }
       });
