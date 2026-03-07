@@ -992,12 +992,41 @@ function initArtistWorksScrollAnimation() {
 function initArtistWorksParallaxOverlapAnimation() {
   const items = Array.from(document.querySelectorAll('.artist_works_layout .artist_works_item'));
   if (!items.length || typeof ScrollTrigger === 'undefined') return;
+  const bodyEl = document.body;
+  const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  if (bodyEl) {
+    bodyEl.classList.remove('artist-works-intro-complete');
+  }
 
   // Ensure legacy alignment classes do not affect full-bleed mode.
   items.forEach((item) => {
     item.classList.remove('align-left', 'align-center', 'align-right');
     gsap.set(item, { opacity: 1 });
   });
+
+  // Integrate first fullscreen image with page-entry timing to avoid abrupt popping.
+  const firstTarget = items[0].querySelector('.artist_works_img_wrap') || items[0].querySelector('.artist_works_img');
+  if (firstTarget) {
+    gsap.killTweensOf(firstTarget);
+    gsap.set(firstTarget, { autoAlpha: 0 });
+    if (prefersReducedMotion) {
+      gsap.set(firstTarget, { autoAlpha: 1 });
+      if (bodyEl) bodyEl.classList.add('artist-works-intro-complete');
+    } else {
+      gsap.to(firstTarget, {
+        autoAlpha: 1,
+        duration: 0.9,
+        delay: 0.08,
+        ease: 'power2.out',
+        onComplete: () => {
+          if (bodyEl) bodyEl.classList.add('artist-works-intro-complete');
+        }
+      });
+    }
+  } else if (bodyEl) {
+    bodyEl.classList.add('artist-works-intro-complete');
+  }
 
   // Clean up prior experimental triggers when Barba re-inits this page.
   ScrollTrigger.getAll().forEach((trigger) => {
@@ -2956,6 +2985,12 @@ function injectPageSpecificCSS(pathname) {
           height: 100svh !important;
           max-height: none !important;
           overflow: hidden;
+        }
+        .artist_works_layout .artist_works_item:first-child .artist_works_img_wrap {
+          opacity: 0;
+        }
+        body.artist-works-intro-complete .artist_works_layout .artist_works_item:first-child .artist_works_img_wrap {
+          opacity: 1;
         }
         .artist_works_layout .artist_works_item .artist_works_img {
           width: 100% !important;
