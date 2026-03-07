@@ -204,7 +204,27 @@ const ARTIST_WORKS_EXPERIMENT_MODE = 'parallax-overlap';
    ─────────────────────────────────────────────────────────────────────────── */
 
 function initMeasurementDimensions() {
+  const normalizeMultiplyString = (value) =>
+    value
+      .replace(/\u00A0/g, ' ')
+      .replace(/(\d)\s*[xX×]\s*(\d)/g, '$1 × $2');
+
+  const normalizeMultiplyInElement = (rootEl) => {
+    if (!rootEl) return;
+    const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node) {
+      const original = node.nodeValue || '';
+      const next = normalizeMultiplyString(original);
+      if (next !== original) node.nodeValue = next;
+      node = walker.nextNode();
+    }
+  };
+
   const measurementGroups = document.querySelectorAll('.g_measurement_wrap');
+  const captions = document.querySelectorAll('.ap_caption');
+
+  captions.forEach((caption) => normalizeMultiplyInElement(caption));
   if (!measurementGroups.length) return;
 
   measurementGroups.forEach(group => {
@@ -213,8 +233,8 @@ function initMeasurementDimensions() {
 
     // Normalize user-entered multiply separators for consistent display.
     vals.forEach(v => {
-      const raw = (v.textContent || '').replace(/\u00A0/g, ' ').trim();
-      const normalized = raw.replace(/(\d)\s*[xX×]\s*(\d)/g, '$1 × $2');
+      const raw = (v.textContent || '').trim();
+      const normalized = normalizeMultiplyString(raw);
       if (normalized !== raw) v.textContent = normalized;
     });
 
@@ -1201,6 +1221,7 @@ function initPageScripts() {
   initCVCleanup();
   initExhibitionSorting();
   initNewsHoverThumbnails(); // News items can appear on multiple pages
+  initMeasurementDimensions(); // Normalize x/× separators in dimensions and captions
   
   // Page-specific scripts
   if (isArtistsList || isExhibitionsList || isArtistPage || isNewsPage || isOldHome || isHome || isHomeBottom) {
@@ -1303,7 +1324,6 @@ function initPageScripts() {
     }
     
     initExhibitionDetailScripts();
-    initMeasurementDimensions(); // Format artwork dimensions
   }
   
   if (isOldHome) {
