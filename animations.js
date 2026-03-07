@@ -211,6 +211,18 @@ function initMeasurementDimensions() {
     const vals = Array.from(group.querySelectorAll('.dim-val'));
     const seps = Array.from(group.querySelectorAll('.dim-sep'));
 
+    // Normalize user-entered multiply separators for consistent display.
+    vals.forEach(v => {
+      const raw = (v.textContent || '').replace(/\u00A0/g, ' ').trim();
+      const normalized = raw.replace(/(\d)\s*[xX×]\s*(\d)/g, '$1 × $2');
+      if (normalized !== raw) v.textContent = normalized;
+    });
+
+    // Keep explicit separator nodes visually consistent.
+    seps.forEach(s => {
+      s.textContent = ' × ';
+    });
+
     // Hide empty values
     vals.forEach(v => {
       const t = (v.textContent || '').trim();
