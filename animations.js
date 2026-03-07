@@ -76,6 +76,53 @@
 // 'legacy' = previous mixed-size + random alignment + fade-up reveal behavior
 const ARTIST_WORKS_EXPERIMENT_MODE = 'parallax-overlap';
 
+function isArtistDetailPath(pathname) {
+  return pathname.includes('/artists/') && !pathname.endsWith('/artists') && pathname !== '/artists/';
+}
+
+function applyArtistControlsClosedState(root = document) {
+  const controls = root.querySelector('.show_controls_inner');
+  if (controls) {
+    controls.style.opacity = '0';
+    controls.style.visibility = 'hidden';
+    controls.style.pointerEvents = 'none';
+  }
+
+  const captionPanel = root.querySelector('.ap_caption_wrap');
+  if (captionPanel) {
+    captionPanel.style.display = 'none';
+    captionPanel.style.height = '0px';
+    captionPanel.style.opacity = '0';
+    captionPanel.style.overflow = 'hidden';
+    captionPanel.style.pointerEvents = 'none';
+  }
+}
+
+// Critical pre-hide: prevent first-paint flash on artist detail.
+(function setupArtistCriticalPrehide() {
+  const style = document.createElement('style');
+  style.setAttribute('data-artist-critical-prehide', 'true');
+  style.textContent = `
+    html.artist-prehide .show_controls_inner {
+      opacity: 0 !important;
+      visibility: hidden !important;
+      pointer-events: none !important;
+    }
+    html.artist-prehide .ap_caption_wrap {
+      display: none !important;
+      height: 0 !important;
+      opacity: 0 !important;
+      overflow: hidden !important;
+      pointer-events: none !important;
+    }
+  `;
+  document.head.appendChild(style);
+
+  if (isArtistDetailPath(window.location.pathname)) {
+    document.documentElement.classList.add('artist-prehide');
+  }
+})();
+
 /* ═══════════════════════════════════════════════════════════════════════════
    1. GLOBAL CSS INJECTION (IIFE)
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -1199,7 +1246,7 @@ function initPageScripts() {
   console.log('🔄 Initializing page scripts...');
   
   const pathname = window.location.pathname;
-  const isArtistPage = pathname.includes('/artists/') && !pathname.endsWith('/artists');
+  const isArtistPage = isArtistDetailPath(pathname);
   const isArtistsList = pathname === '/artists' || pathname === '/artists/';
   const isExhibitionDetail = pathname.includes('/exhibitions/') && !pathname.endsWith('/exhibitions');
   const isExhibitionsList = pathname === '/exhibitions' || pathname === '/exhibitions/';
@@ -1217,6 +1264,8 @@ function initPageScripts() {
 
   if (!isArtistPage) {
     document.body.classList.remove('artist-content-ready');
+    document.body.classList.remove('artist-controls-ready');
+    document.documentElement.classList.remove('artist-prehide');
   }
   
   // Global scripts (run on all pages)
@@ -1237,8 +1286,11 @@ function initPageScripts() {
   
   if (isArtistPage) {
     // Artist detail should enter only after nav has finished.
+    document.documentElement.classList.add('artist-prehide');
+    applyArtistControlsClosedState();
     document.body.classList.remove('artist-content-ready');
-    revealArtistPageContent();
+    document.body.classList.remove('artist-controls-ready');
+    revealArtistPageContent(() => revealArtistControls());
 
     initSwiper();
     initCVReadMore();
@@ -1365,9 +1417,12 @@ function initPageScripts() {
   console.log('✅ Page scripts initialized');
 }
 
-function revealArtistPageContent() {
+function revealArtistPageContent(onComplete) {
   const wrap = document.querySelector('.artist_works_layout');
-  if (!wrap) return;
+  if (!wrap) {
+    if (typeof onComplete === 'function') onComplete();
+    return;
+  }
 
   const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   gsap.killTweensOf(wrap);
@@ -1375,6 +1430,7 @@ function revealArtistPageContent() {
   if (prefersReducedMotion) {
     gsap.set(wrap, { opacity: 1 });
     document.body.classList.add('artist-content-ready');
+    if (typeof onComplete === 'function') onComplete();
     return;
   }
 
@@ -1383,8 +1439,38 @@ function revealArtistPageContent() {
     opacity: 1,
     duration: 0.55,
     ease: 'power2.out',
-    onComplete: () => document.body.classList.add('artist-content-ready')
+    onComplete: () => {
+      document.body.classList.add('artist-content-ready');
+      if (typeof onComplete === 'function') onComplete();
+    }
   });
+}
+
+function revealArtistControls() {
+  const controls = document.querySelector('.show_controls_inner');
+  if (!controls) return;
+
+  const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  gsap.killTweensOf(controls);
+  controls.style.visibility = 'visible';
+  controls.style.pointerEvents = 'auto';
+  document.body.classList.add('artist-controls-ready');
+  document.documentElement.classList.remove('artist-prehide');
+
+  if (prefersReducedMotion) {
+    gsap.set(controls, { opacity: 1 });
+    return;
+  }
+
+  gsap.fromTo(
+    controls,
+    { opacity: 0 },
+    {
+      opacity: 1,
+      duration: 0.35,
+      ease: 'power1.out'
+    }
+  );
 }
 
 function initArtistCaptionToggle() {
@@ -3247,6 +3333,17 @@ ${exhibitionStickyTitleHoverColorFix}
           opacity: 1;
         }
 
+        /* Keep controls hidden until artist content intro has finished */
+        .show_controls_inner {
+          opacity: 0;
+          visibility: hidden;
+          pointer-events: none;
+        }
+        body.artist-controls-ready .show_controls_inner {
+          visibility: visible;
+          pointer-events: auto;
+        }
+
         /*
           Legacy artist-works CSS is preserved in JS and can be re-enabled by
           setting ARTIST_WORKS_EXPERIMENT_MODE = 'legacy'.
@@ -3450,7 +3547,7 @@ ${exhibitionStickyTitleHoverColorFix}
     if (!container) return;
     
     const pathname = window.location.pathname;
-    const isArtistInitialPage = pathname.includes('/artists/') && !pathname.endsWith('/artists') && pathname !== '/artists/';
+    const isArtistInitialPage = isArtistDetailPath(pathname);
     const namespace = injectPageSpecificCSS(pathname);
     
     container.setAttribute('data-barba-namespace', namespace);
@@ -3465,6 +3562,9 @@ ${exhibitionStickyTitleHoverColorFix}
     // Initialize scripts immediately on non-artist pages.
     if (!isArtistInitialPage) {
       initPageScripts();
+    } else {
+      // Hard-refresh artist pages: force controls/captions closed before nav intro.
+      applyArtistControlsClosedState();
     }
 
     // Also run nav intro animation on hard refresh (no Barba transition yet)
@@ -3535,8 +3635,17 @@ barba.init({
       window.scrollTo(0, 0);
       
       const container = data.next.container;
+      const nextPath = (data.next && data.next.url && data.next.url.path) || '';
+      const isArtistNextPage = isArtistDetailPath(nextPath);
       const navWrap = document.querySelector('.nav_wrap');
       const pageMain = container.querySelector('.page_main');
+      
+      if (isArtistNextPage) {
+        document.documentElement.classList.add('artist-prehide');
+        applyArtistControlsClosedState(container);
+      } else {
+        document.documentElement.classList.remove('artist-prehide');
+      }
       
       // Make container visible
       container.style.visibility = 'visible';
