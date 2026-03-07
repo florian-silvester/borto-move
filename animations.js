@@ -1407,7 +1407,8 @@ function initArtistCaptionToggle() {
     panel.style.opacity = '0';
     panel.style.overflow = 'hidden';
     panel.style.pointerEvents = 'none';
-    trigger.classList.remove('is-active');
+    trigger.classList.remove('is-caption-open');
+    trigger.setAttribute('aria-expanded', 'false');
     isOpen = false;
   };
 
@@ -1423,7 +1424,8 @@ function initArtistCaptionToggle() {
       panel.style.opacity = '1';
       panel.style.overflow = 'visible';
       panel.style.pointerEvents = 'auto';
-      trigger.classList.add('is-active');
+      trigger.classList.add('is-caption-open');
+      trigger.setAttribute('aria-expanded', 'true');
       isOpen = true;
       return;
     }
@@ -1442,7 +1444,8 @@ function initArtistCaptionToggle() {
         }
       }
     );
-    trigger.classList.add('is-active');
+    trigger.classList.add('is-caption-open');
+    trigger.setAttribute('aria-expanded', 'true');
     isOpen = true;
   };
 
@@ -1469,7 +1472,8 @@ function initArtistCaptionToggle() {
         }
       }
     );
-    trigger.classList.remove('is-active');
+    trigger.classList.remove('is-caption-open');
+    trigger.setAttribute('aria-expanded', 'false');
     isOpen = false;
   };
 
@@ -1477,12 +1481,19 @@ function initArtistCaptionToggle() {
 
   window.artistCaptionToggleHandler = function artistCaptionToggleHandler(e) {
     const hit = e.target.closest('#Caption');
-    if (!hit) return;
-    e.preventDefault();
-    if (isOpen) {
+    if (hit) {
+      e.preventDefault();
+      if (isOpen) {
+        closePanel();
+      } else {
+        openPanel();
+      }
+      return;
+    }
+
+    // Close when clicking outside the artist controls container.
+    if (isOpen && !e.target.closest('.show_controls_inner')) {
       closePanel();
-    } else {
-      openPanel();
     }
   };
 
