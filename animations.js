@@ -1806,19 +1806,44 @@ function initCVReadMore() {
   const cvEntryWrap = document.querySelector('.cv_entry_wrap');
   const cvEntry = document.querySelector('.cv_entry');
   const cvFade = document.querySelector('.cv_fade');
-  
-  if (!cvEntryWrap || !cvEntry || !cvFade) return;
-  
-  let isExpanded = false;
+  const readCTAEl = document.querySelector('.cv_read_cta');
   
   // Event delegation - remove old listener
   if (window.cvReadMoreHandler) {
     document.removeEventListener('click', window.cvReadMoreHandler);
   }
+
+  if (!cvEntryWrap || !cvEntry || !cvFade) return;
+
+  const computedMaxHeight = getComputedStyle(cvEntryWrap).maxHeight;
+  const collapsedMaxHeight = computedMaxHeight && computedMaxHeight !== 'none'
+    ? computedMaxHeight
+    : '70vh';
+
+  // Reset baseline on each init (important after Barba transitions).
+  cvEntryWrap.classList.remove('expanded');
+  gsap.set(cvEntryWrap, { maxHeight: collapsedMaxHeight });
+  cvFade.style.display = 'block';
+  if (readCTAEl) {
+    readCTAEl.style.display = '';
+    readCTAEl.textContent = 'Read More';
+  }
+
+  // Short CVs should be fully visible and not animate/crop.
+  const hasOverflow = cvEntry.scrollHeight > cvEntryWrap.clientHeight + 2;
+  if (!hasOverflow) {
+    gsap.set(cvEntryWrap, { maxHeight: 'none' });
+    cvFade.style.display = 'none';
+    if (readCTAEl) readCTAEl.style.display = 'none';
+    return;
+  }
+
+  let isExpanded = false;
   
   window.cvReadMoreHandler = function(e) {
     const readCTA = e.target.closest('.cv_read_cta');
     if (readCTA) {
+      e.preventDefault();
       isExpanded = !isExpanded;
       const fullHeight = cvEntry.scrollHeight + "px";
       
@@ -1828,7 +1853,7 @@ function initCVReadMore() {
         readCTA.textContent = 'Read Less';
         cvEntryWrap.classList.add('expanded');
       } else {
-        gsap.to(cvEntryWrap, { maxHeight: '50vh', duration: 0.8, ease: "power2.inOut" });
+        gsap.to(cvEntryWrap, { maxHeight: collapsedMaxHeight, duration: 0.8, ease: "power2.inOut" });
         cvFade.style.display = 'block';
         readCTA.textContent = 'Read More';
         cvEntryWrap.classList.remove('expanded');
